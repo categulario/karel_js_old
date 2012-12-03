@@ -62,12 +62,12 @@ function tokenizar(cadena){
 
     push_token = function( token){
         /*Empuja un token en la pila*/
-        pila_tokens.append(token);
+        pila_tokens.push(token);
     }
 
     push_char = function( char){
         /*Pone un caracter en la pila de caracteres*/
-        pila_chars.append(char);
+        pila_chars.push(char);
         char_pushed = true;
     }
 
