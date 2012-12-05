@@ -38,12 +38,6 @@ function tokenizar(cadena){
     token = ''
     estado = ESTADO_ESPACIO
 
-    pila_chars.push = function( char){
-        /*Pone un caracter en la pila de caracteres*/
-        pila_chars.push(char);
-        char_pushed = true;
-    }
-
     resultado = [];
     i = 0;
     salida = false;
@@ -84,8 +78,7 @@ function tokenizar(cadena){
                     token += caracter_actual
                     estado = ESTADO_PALABRA
                 }else if( _in(caracter_actual, simbolos)){
-                    pila_chars.push(caracter_actual) //Podria ser algo valido como ();,
-                    char_pushed = true;
+                    token += caracter_actual
                     estado = ESTADO_SIMBOLO
                 }else if( caracter_actual == '\n'){
                     tiene_cambio_de_linea = true;
@@ -99,8 +92,9 @@ function tokenizar(cadena){
                     throw KarelException("Este token no parece valido, linea %d columna %d"%(linea, columna))
                 else if( _in(caracter_actual, simbolos)){
                     estado = ESTADO_SIMBOLO
-                    pila_chars.push(caracter_actual)
-                    char_pushed = true;
+                    resultado.push(token)
+                    token = ''
+                    token += caracter_actual
                     break
                 }else if( _in(caracter_actual, espacios)){
                     if( caracter_actual == '\n')
@@ -110,15 +104,15 @@ function tokenizar(cadena){
                 }
             }else if( estado == ESTADO_PALABRA){
                 if (! _in(caracter_actual, caracteres))
-                    throw KarelException("Caracter desconocido en la linea %d columna %d"%(linea, columna))
+                    throw "Caracter desconocido en la linea "+linea+" columna "+columna
                 if (_in(caracter_actual, palabras+numeros))
                     token += caracter_actual
                 else if( _in(caracter_actual, simbolos)){
                     estado = ESTADO_SIMBOLO
-                    sultado.push(token)
+                    resultado.push(token)
                     token = ''
                     token += caracter_actual
-                    break
+                    continue
                 }else if( _in(caracter_actual, espacios)){
                     if (caracter_actual == '\n')
                         tiene_cambio_de_linea = true
@@ -133,18 +127,19 @@ function tokenizar(cadena){
                     estado = ESTADO_COMENTARIO
                 }else if( _in(caracter_actual, numeros)){
                     estado = ESTADO_NUMERO
-                    pila_chars.push(caracter_actual)
-                    char_pushed = true;
-                    if (token)
-                        break
-                    else
+                    if (token){
+                        resultado.push(token)
+                        token = ''
+                        token += caracter_actual
+                    }else
                         continue
                 }else if( _in(caracter_actual, palabras)){
                     estado = ESTADO_PALABRA
-                    pila_chars.push(caracter_actual)
-                    char_pushed = true;
-                    if(token)
-                        break
+                    if(token){
+                        resultado.push(token)
+                        token = ''
+                        token += caracter_actual
+                    }
                 }else if( _in(caracter_actual, simbolos)){
                     if( ultimo_caracter == "("){
                         if( caracter_actual == '*'){
@@ -153,8 +148,9 @@ function tokenizar(cadena){
                             abrir_comentario = '(*'
                             continue
                         }else{
-                            pila_chars.push(caracter_actual)
-                            char_pushed = true;
+                            resultado.push(token)
+                            token = ''
+                            token += caracter_actual
                             break
                         }
                     }else if( caracter_actual != '('){ //el único símbolo con continuación
