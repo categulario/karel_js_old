@@ -119,16 +119,16 @@ KLexer = function(cadena, debug){
             } else if (this.estado == this.ESTADO_NUMERO){
                 if (this.debug)
                     console.log( "Encontré "+this.caracter_actual+" en estado número")
-                if (! this.caracter_actual in this.caracteres)
+                if (this.caracteres.indexOf(this.caracter_actual) == -1)
                     throw KarelException("Caracter desconocido en la linea %d columna %d"%(this.linea, this.columna))
-                if (this.caracter_actual in this.numeros)
+                if (this.numeros.indexOf(this.caracter_actual) != -1)
                     this.token += this.caracter_actual
-                else if (this.caracter_actual in this.palabras) //Encontramos una letra en el estado numero, incorrecto
+                else if (this.palabras.indexOf(this.caracter_actual) != -1) //Encontramos una letra en el estado numero, incorrecto
                     throw KarelException("Este token no parece valido, linea %d columna %d"%(this.linea, this.columna))
-                else if (this.caracter_actual in this.simbolos){
+                else if (this.simbolos.indexOf(this.caracter_actual) != -1){
                     this.estado = this.ESTADO_SIMBOLO
                     break
-                } else if (this.caracter_actual in this.espacios){
+                } else if (this.espacios.indexOf(this.caracter_actual) != -1){
                     this.estado = this.ESTADO_ESPACIO
                     break //Terminamos este token
                 }
@@ -199,7 +199,7 @@ KLexer = function(cadena, debug){
                             this.caracter_actual = this.lee_caracter()
                             break
                         }
-                    } else if (this.caracter_actual in this.lonely_chars){ //Caracteres que viven solos
+                    } else if (this.lonely_chars.indexOf(this.caracter_actual) != -1){ //Caracteres que viven solos
                         this.estado = this.ESTADO_ESPACIO
                         if (this.token)
                             break
