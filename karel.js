@@ -175,7 +175,7 @@ KLexer = function(cadena, debug){
                         this.archivo.readline() //LINEA
                         this.cambio_de_linea()
                         this.estado = this.ESTADO_ESPACIO
-                        if (this.token.endswith('/'))
+                        if (this.token.charAt(this.token.length-1) == '/')
                             this.token = this.token.slice(0, this.token.length-1)
                         if (this.token){
                             this.caracter_actual = this.lee_caracter()
@@ -184,7 +184,7 @@ KLexer = function(cadena, debug){
                     } else if (this.caracter_actual == '*' && this.ultimo_caracter == '/' && this.sintaxis == 'java'){
                         this.estado = this.ESTADO_COMENTARIO
                         this.abrir_comentario = '/*'
-                        if (this.token.endswith('/'))
+                        if (this.token.charAt(this.token.length-1) == '/')
                             this.token = this.token.slice(0, this.token.length-1)
                         if (this.token){
                             this.caracter_actual = this.lee_caracter()
@@ -227,12 +227,165 @@ KLexer = function(cadena, debug){
     }
 }
 
-//~ k = new KLexer('iniciar-programa inicia-ejecucion avanza; apagate;', false);
-//~ k.establecer_sintaxis('pascal')
-//~
-//~ console.log(k.get_token())
-//~ console.log(k.get_token())
-//~ console.log(k.get_token())
-//~ console.log(k.get_token())
-//~
-//~ console.log('done!')
+KGrammar = function(lexer, strict, futuro, strong_logic){
+    /* Inicializa la gramatica:
+    flujo           indica el torrente de entrada
+    archivo         es el nombre del archivo fuente, si existe
+    strict          Marca una sintaxis más 'estricta' que impide no usar la sentencia apágate
+    futuro          indica si se pueden usar caracteristicas del futuro
+                    de Karel como las condiciones 'falso' y 'verdadero'
+    strong_logic    Elimina las negaciones del lenguaje de karel, propiciando el uso de la
+                    palabra 'no' para negar enunciados
+    */
+    this.strict = strict
+    this.tiene_apagate = false
+    this.instrucciones = ['avanza', 'gira-izquierda', 'coge-zumbador', 'deja-zumbador', 'apagate', 'sal-de-instruccion', 'sal-de-bucle', 'continua-bucle']
+    this.instrucciones_java = ['move', 'turnleft', 'pickbeeper', 'putbeeper', 'turnoff', 'return', 'break', 'continue']
+    //La instruccion sirve para combinarse con el bucle mientras y la condicion verdadero
+    this.condiciones = [
+        'frente-libre',
+        'derecha-libre',
+        'izquierda-libre',
+        'junto-a-zumbador',
+        'algun-zumbador-en-la-mochila',
+        "orientado-al-norte",
+        "orientado-al-este",
+        "orientado-al-sur",
+        "orientado-al-oeste",
+        "no-orientado-al-oeste",
+        "no-orientado-al-norte",
+        "no-orientado-al-sur",
+        "no-orientado-al-este",
+        'no-junto-a-zumbador',
+        'derecha-bloqueada',
+        'frente-bloqueado',
+        'izquierda-bloqueada',
+        'ningun-zumbador-en-la-mochila',
+        "si-es-cero",
+        "verdadero", //Reservadas para futuros usos
+        "falso" //reservadas para futuros usos
+    ]
+    this.condiciones_java = [
+        'frontIsClear',
+        'rightIsClear',
+        'leftIsClear',
+        'nextToABeeper',
+        'anyBeepersInBeeperBag',
+        "facingNorth",
+        "facingEast",
+        "facingSouth",
+        "facingWest",
+        "notFacingNorth",
+        "notFacingEast",
+        "notFacingSouth",
+        "notFacingWest",
+        'notNextToABeeper',
+        'rightIsBlocked',
+        'frontIsBlocked',
+        'leftIsBlocked',
+        'noBeepersInBeeperBag',
+        "iszero",
+        "true", //Reservadas para futuros usos
+        "false" //reservadas para futuros usos
+    ]
+    if (strong_logic){ //Se eliminan las negaciones del lenguaje de Karel
+        this.condiciones = this.condiciones.slice(0, 9).concat(this.condiciones.slice(18))
+        this.condiciones_java = this.condiciones_java.slice(0,9).concat(this.condiciones_java(18))
+    }
+    if (!futuro){
+        this.condiciones = this.condiciones.slice(0, this.condiciones.length-2)
+        this.condiciones_java = this.condiciones_java.slice(0, this.condiciones_java.length-2)
+        this.instrucciones = this.instrucciones.slice(0, this.instrucciones.length-2)
+        this.instrucciones_java = this.instrucciones_java.slice(0, this.instrucciones_java.length-2)
+    }
+    this.expresiones_enteras = ['sucede', 'precede']
+    this.expresiones_enteras_java = ['succ', 'pred']
+
+    this.estructuras = ['si', 'mientras', 'repite', 'repetir']
+    this.estructuras_java = ['if', 'while', 'iterate']
+    this.estructuras_ruby = ['si', 'mientras']
+
+    this.palabras_reservadas_java = [
+        "class",
+        "void",
+        "define"
+    ].concat(this.instrucciones_java).concat(this.condiciones_java).concat(this.expresiones_enteras_java).concat(this.estructuras_java)
+
+    this.palabras_reservadas_ruby = [
+        "def",
+        "veces",
+        "fin",
+        "o",
+        "y",
+        "no"
+    ].concat(this.instrucciones).concat(this.condiciones).concat(this.expresiones_enteras).concat(this.estructuras_ruby)
+
+    this.palabras_reservadas = [
+        "iniciar-programa",
+        "inicia-ejecucion",
+        "termina-ejecucion",
+        "finalizar-programa",
+        "no",
+        "y",
+        "o",
+        "u",
+        "define-nueva-instruccion",
+        "define-prototipo-instruccion",
+        "inicio",
+        "fin",
+        "hacer",
+        "veces",
+        "entonces",
+        "sino"
+    ].concat(this.instrucciones).concat(this.condiciones).concat(this.expresiones_enteras).concat(this.estructuras)
+
+    this.lexer = lexer
+    this.token_actual = this.lexer.get_token()
+    this.prototipo_funciones = {}
+    this.funciones = {}
+    this.llamadas_funciones = {}
+    this.arbol = {
+        "main": [], //Lista de instrucciones principal, declarada en 'inicia-ejecucion'
+        "funciones": {} //Diccionario con los nombres de las funciones como llave
+    }
+    // Un diccionario que tiene por llaves los nombres de las funciones
+    // y que tiene por valores listas con las variables de dichas
+    // funciones
+    this.lista_programa = []
+    this.ejecutable = {
+        'lista': [],
+        'indice_funciones': [],
+        'main': 0
+    }
+    // Una lista que puede contener el árbol expandido con las instrucciones
+    // del programa de forma adecuada
+    this.futuro = futuro
+    this.sintaxis = 'pascal' //puede cambiar a java segun el primer token del programa
+    this.nombre_clase = '' //Para la sintaxis de java
+
+    this.obtener_linea_error = function(){
+        //Obtiene la línea en la que acaba de ocurrir el error
+        if (self.token_actual.es_primer_token)
+            return self.lexer.linea - 1
+        else
+            return self.lexer.linea
+    }
+
+    this.avanza_token = function(){
+        /* Avanza un token en el archivo */
+        siguiente_token = self.lexer.get_token()
+
+        if (siguiente_token.token != ''){
+            if (self.sintaxis == 'pascal')
+                siguiente_token.lower()
+            self.token_actual = siguiente_token
+            return true
+        } else
+            return false
+    }
+}
+
+l = new KLexer('')
+g = new KGrammar(l)
+
+console.log('done!')
