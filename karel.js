@@ -1011,13 +1011,12 @@ KGrammar = function(lexer, strict, futuro, strong_logic){
         /*Expande el árbol de instrucciones para ser usado por krunner
         durante la ejecución*/
         for (funcion in this.arbol['funciones']){ //Itera sobre llaves
-            nueva_funcion = {
-                funcion: {
-                    'params': this.arbol['funciones'][funcion]['params']
-                }
+            var nueva_funcion = {}
+            nueva_funcion[funcion] = {
+                'params': this.arbol['funciones'][funcion]['params']
             }
             this.lista_programa.push(nueva_funcion)
-            posicion_inicio = this.lista_programa.length-1
+            var posicion_inicio = this.lista_programa.length-1
 
             this.ejecutable['indice_funciones'][funcion] = posicion_inicio
             this.expandir_arbol_recursivo(this.arbol['funciones'][funcion]['cola'])
@@ -1039,34 +1038,32 @@ KGrammar = function(lexer, strict, futuro, strong_logic){
     this.expandir_arbol_recursivo = function(cola){
         /*Toma un arbol y lo expande*/
         for(i=0;i<cola.length;i++){
-            elem = cola[i]
-            console.log(elem)
+            var elem = cola[i]
             if (this.instrucciones.indexOf(elem) != -1){
                 this.lista_programa.push(elem)
             } else { //Se trata de un diccionario
                 if (['repite', 'mientras'].indexOf(elem['estructura']) != -1){
-                    posicion_inicio = this.lista_programa.length
-                    estructura = elem['estructura']
-                    nueva_estructura = {
-                        estructura: {
-                            'argumento': elem['argumento'],
-                            'id': posicion_inicio
-                        }
+                    var posicion_inicio = this.lista_programa.length
+                    var estructura = elem['estructura']
+                    var nueva_estructura = {}
+                    nueva_estructura[estructura] = {
+                        'argumento': elem['argumento'],
+                        'id': posicion_inicio
                     }
 
                     this.lista_programa.push(nueva_estructura)
                     this.expandir_arbol_recursivo(elem['cola'])
-                    posicion_fin = this.lista_programa.length
+                    var posicion_fin = this.lista_programa.length
                     this.lista_programa.push({
                         'fin': {
                             'estructura': elem['estructura'],
                             'inicio': posicion_inicio
                         }
                     })
-                    this.lista_programa[posicion_inicio][elem['estructura']]['fin'] = posicion_fin
+                    this.lista_programa[posicion_inicio][estructura]['fin'] = posicion_fin
                 } else if (elem['estructura'] == 'si'){
-                    posicion_inicio = this.lista_programa.length
-                    nueva_estructura = {
+                    var posicion_inicio = this.lista_programa.length
+                    var nueva_estructura = {
                         'si': {
                             'argumento': elem['argumento'],
                             'id' : posicion_inicio
@@ -1075,7 +1072,7 @@ KGrammar = function(lexer, strict, futuro, strong_logic){
 
                     this.lista_programa.push(nueva_estructura)
                     this.expandir_arbol_recursivo(elem['cola'])
-                    posicion_fin = this.lista_programa.length
+                    var posicion_fin = this.lista_programa.length
                     this.lista_programa.push({
                         'fin': {
                             'estructura': elem['estructura'],
@@ -1085,12 +1082,12 @@ KGrammar = function(lexer, strict, futuro, strong_logic){
                     })
                     this.lista_programa[posicion_inicio]['si']['fin'] = posicion_fin
                     if ('sino-cola' in elem){
-                        nueva_estructura = {
+                        var nueva_estructura = {
                             'sino': {}
                         }
                         this.lista_programa.push(nueva_estructura)
                         this.expandir_arbol_recursivo(elem['sino-cola'])
-                        fin_sino = this.lista_programa.length
+                        var fin_sino = this.lista_programa.length
                         this.lista_programa.push({
                             'fin': {
                                 'estructura': 'sino'
@@ -1099,8 +1096,8 @@ KGrammar = function(lexer, strict, futuro, strong_logic){
                         this.lista_programa[posicion_fin]['fin']['fin'] = fin_sino
                     }
                 } else { //Se trata de la llamada a una función
-                    estructura = elem['estructura']
-                    nueva_estructura = {}
+                    var estructura = elem['estructura']
+                    var nueva_estructura = {}
                     nueva_estructura[estructura] = {
                         'argumento': elem['argumento'],
                         'nombre': elem['nombre']
@@ -1112,7 +1109,7 @@ KGrammar = function(lexer, strict, futuro, strong_logic){
     }
 }
 
-l = new KLexer('iniciar-programa inicia-ejecucion si frente-libre entonces avanza; termina-ejecucion finalizar-programa')
+l = new KLexer('iniciar-programa define-nueva-instruccion a como avanza; inicia-ejecucion termina-ejecucion finalizar-programa')
 g = new KGrammar(l, false, true, false)
 g.verificar_sintaxis()
 
