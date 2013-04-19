@@ -16,6 +16,16 @@ if (!String.prototype.format) {
   };
 }
 
+if(!Array.prototype.forEach) {
+    Array.prototype.forEach = function(f){
+        for(i=0;i<this.length;i++){
+            f(this[i])
+        }
+    }
+}
+
+ascii_letters = 'qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM'
+
 KLexer = function(cadena, debug){
     this.ESTADO_ESPACIO = ' '
     this.ESTADO_PALABRA = 'a'
@@ -239,6 +249,9 @@ KLexer = function(cadena, debug){
         obj_token.toString = function(){
             return this.token
         }
+        obj_token.lower = function(){
+            this.token = this.token.toLowerCase()
+        }
         this.es_primer_token = false
         return obj_token
     }
@@ -393,381 +406,82 @@ KGrammar = function(lexer, strict, futuro, strong_logic){
         siguiente_token = this.lexer.get_token()
 
         if (siguiente_token.token != ''){
-            if (this.sintaxis == 'pascal')
+            if (this.sintaxis == 'pascal'){
                 siguiente_token.lower()
+            }
             this.token_actual = siguiente_token
             return true
         } else
             return false
     }
 
-    this.class_body = new function(){
-        if (this.token_actual.token != '{')
-            throw "Se esperaba '{' para iniciar la declaración de la clase"
-        this.avanza_token()
+    this.verificar_sintaxis = function(){
+        /*Verifica que este correcta la gramatica de un programa
+        en karel */
+        if (this.token_actual.token == 'iniciar-programa'){
+            if (this.avanza_token()){
+                this.bloque()
+                if (this.token_actual.token != 'finalizar-programa')
+                    throw "Se esperaba 'finalizar-programa' al final del codigo"
+            } else
+                throw "Codigo mal formado"
+        } else if (this.token_actual.token == 'class'){ //Está escrito en java
+            this.sintaxis = 'java'
+            this.lexer.establecer_sintaxis('java')
+            if (this.avanza_token()){
+                if (this.es_identificador_valido(this.token_actual.token)){
+                    this.nombre_clase = this.token_actual.token
+                    this.avanza_token()
+                    this.class_body()
 
-        while (this.token_actual.token == 'void' || this.token_actual.token == 'define')
-            this.method_declaration()
+                    //toca revisar las llamadas a funciones hechas durante el programa
+                    for(funcion in this.llamadas_funciones){
+                        if (this.funciones[funcion] != undefined){
+                            if (this.funciones[funcion].length != this.llamadas_funciones[funcion])
+                                throw "La funcion '"+funcion+"' no se llama con la misma cantidad de parámetros que como se definió"
+                        } else
+                            throw "La función '"+funcion+"' es llamada pero no fue declarada"
+                    }
+                } else
+                    throw this.token_actual+' no es un identificador valido'
+            } else
+                throw "Codigo mal formado"
+        } else {
+            this.sintaxis = 'ruby'
+            this.lexer.establecer_sintaxis('ruby')
 
-        if (this.token_actual.token == this.nombre_clase){ //Constructor de la clase
-            this.avanza_token()
-            this.empty_arguments()
-            this.arbol['main'] = this.block([], false, false)
-        } else
-            throw this.token_actual+' no es un nombre de constructor válido, debe coincidir con el nombre de la clase'
-
-        while (this.token_actual.token == 'void' || this.token_actual.token == 'define')
-            this.method_declaration()
-
-        if (this.token_actual.token != '}')
-            throw "Se esperaba '}' para iniciar la declaración de la clase"
+            this.arbol['main'] = this.ruby_codeblock([], False, False)
+        }
+        if (this.strict && (! this.tiene_apagate))
+            throw "Tu código no tiene 'apagate', esto no es permitido en el modo estricto"
     }
 
-    this.method_declaration = function(){
-        this.avanza_token()
-
-        requiere_parametros = false //Indica si la funcion a definir tiene parametros
-        nombre_funcion = ''
-
-        if (this.palabras_reservadas_java.indexOf(this.token_actual.token) != -1 || ! this.es_identificador_valido(this.token_actual.token))
-            throw "Se esperaba un nombre de método válido, '"+this.token_actual+"' no lo es"
-
-        if (this.token_actual.token in this.funciones)
-            throw "Ya se ha definido una funcion con el nombre '"+this.token_actual+"'"
-        else {
-            this.funciones[this.token_actual.token] = []
-            nombre_funcion = this.token_actual.token
-        }
-
-        this.arbol['funciones'][nombre_funcion] = {
-            'params': [],
-            'cola': []
-        }
-
-        this.avanza_token()
-
-        if (this.token_actual.token != '(')
-            throw "Se esperaba '(' después del nombre de un método")
-
-        this.avanza_token()
-        while (this.token_actual.token != ')')
-            if (this.palabras_reservadas_java.indexOf(this.token_actual) != -1 || ! this.es_identificador_valido(this.token_actual))
-                throw "Se esperaba un nombre de variable, '%s' no es válido"%this.token_actual)
-            else:
-                if this.token_actual in this.funciones[nombre_funcion]:
-                    throw "El método '%s' ya tiene un parámetro con el nombre '%s'"%(nombre_funcion, this.token_actual))
-                else:
-                    this.funciones[nombre_funcion].append(this.token_actual)
-                    this.avanza_token()
-
-                if this.token_actual == ',':
-                    this.avanza_token()
-                else if this.token_actual == ')':
-                    break
-                else:
-                    throw "Se esperaba ',', encontré '%s'"%this.token_actual)
-
-        this.arbol['funciones'][nombre_funcion]['params'] = this.funciones[nombre_funcion]
-
-        if this.token_actual != ')':
-            throw "Se esperaba ')' luego de la lista de parámetros de un método")
-        this.avanza_token()
-
-        this.arbol['funciones'][nombre_funcion]['cola'] = this.statement(this.funciones[nombre_funcion], True, false)
-    }
-
-    this.empty_arguments(self):
-        if this.token_actual == '(':
-            this.avanza_token()
-            if this.token_actual == ')':
-                this.avanza_token()
-            else:
-                throw "Se esperaba ')'")
-        else:
-            throw "Se esperaba '(' en esta declaración de argumentos vacíos")
-
-    this.block(self, lista_variables, c_funcion, c_bucle):
-        retornar_valor = [] #Una lista de funciones
-
-        if this.token_actual != '{':
-            throw "Se esperaba '{' para iniciar el bloque")
-        this.avanza_token()
-
-        while this.token_actual != '}':
-            retornar_valor += this.statement(lista_variables, c_funcion, c_bucle)
-
-        return retornar_valor
-
-    this.statement(self, lista_variables, c_funcion, c_bucle):
-        retornar_valor = []
-
-        if this.token_actual in this.instrucciones_java:
-            if this.token_actual == 'return':
-                if c_funcion:
-                    retornar_valor = [this.traducir(this.token_actual)]
-                    this.avanza_token()
-                    if this.token_actual == '(':
-                        this.empty_arguments()
-                    if this.token_actual != ';':
-                        throw "Se esperaba ';' después de una llamada a función")
-                    else:
-                        this.avanza_token()
-                else:
-                    throw "No es posible usar 'return' fuera de una instruccion :)")
-            else if this.token_actual == 'break' || this.token_actual == 'continue':
-                if c_bucle:
-                    retornar_valor = [this.traducir(this.token_actual)]
-                    this.avanza_token()
-                    if this.token_actual == '(':
-                        this.empty_arguments()
-                    if this.token_actual != ';':
-                        throw "Se esperaba ';' después de una llamada a función")
-                    else:
-                        this.avanza_token()
-                else:
-                    throw "No es posible usar '"+this.token_actual.token+"' fuera de un bucle :)")
-            else:
-                if this.token_actual == 'turnoff':
-                    this.tiene_apagate = True
-                retornar_valor = [this.traducir(this.token_actual)]
-                this.avanza_token()
-                this.empty_arguments()
-                if this.token_actual != ';':
-                    throw "Se esperaba ';' después de una llamada a función")
-                else:
-                    this.avanza_token()
-        else if this.token_actual == 'if':
-            retornar_valor = [this.if_statement(lista_variables, c_funcion, c_bucle)]
-        else if this.token_actual == 'while':
-            retornar_valor = [this.while_statement(lista_variables, c_funcion)]
-        else if this.token_actual == 'iterate':
-            retornar_valor = [this.iterate_statement(lista_variables, c_funcion)]
-        else if this.token_actual == '{':
-            retornar_valor = this.block(lista_variables, c_funcion, c_bucle)
-            if this.token_actual == '}':
-                this.avanza_token()
-            else:
-                throw "Se esperaba '}' para concluir el bloque, encontré '%s'"%this.token_actual)
-        else if this.token_actual ! in this.palabras_reservadas_java and this.es_identificador_valido(this.token_actual):
-            #Se trata de una instrucción creada por el usuario
-            nombre_funcion = this.token_actual
-            retornar_valor = [{
-                'estructura': 'instruccion',
-                'nombre': nombre_funcion,
-                'argumento': []
-            }]
-            this.avanza_token()
-
-            if this.token_actual != '(':
-                throw "Se esperaba '(' para indicar los parámetros de la funcion")
-            this.avanza_token()
-
-            num_parametros = 0
-            while this.token_actual != ')':
-                retornar_valor[0]['argumento'].append(this.int_exp(lista_variables))
-                num_parametros += 1
-                if this.token_actual == ')':
-                    break
-                else if this.token_actual == ',':
-                    this.avanza_token()
-                else:
-                    throw "Se esperaba ',', encontré '%s'"%this.token_actual)
-            this.avanza_token()
-
-            if ! this.futuro and num_parametros>1:
-                throw "No están habilitadas las funciones con varios parámetros")
-
-            this.llamadas_funciones.update({nombre_funcion: num_parametros}) #La usaremos para luego comparar existencias
-            if this.token_actual != ';':
-                throw "Se esperaba ';' después de una llamada a función")
-            else:
-                this.avanza_token()
-        else:
-            throw "Se esperaba un procedimiento, '%s' no es válido"%this.token_actual)
-
-        return retornar_valor
-
-    this.if_statement(self, lista_variables, c_funcion, c_bucle):
-        retornar_valor = {
-            'estructura': 'si',
-            'argumento': None,
-            'cola': []
-        }
-
-        this.avanza_token()
-
-        if this.token_actual != '(':
-            throw "Se esperaba '(' para indicar argumento lógico del 'if'")
-        this.avanza_token()
-
-        retornar_valor['argumento'] = this.expression(lista_variables)
-
-        if this.token_actual != ')':
-            throw "Se esperaba ')'")
-        this.avanza_token()
-
-        retornar_valor['cola'] = this.statement(lista_variables, c_funcion, c_bucle)
-
-        if this.token_actual == 'else':
-            retornar_valor.update({'sino-cola': []})
-            this.avanza_token()
-            retornar_valor['sino-cola'] = this.statement(lista_variables, c_funcion, c_bucle)
-
-        return retornar_valor
-
-    this.while_statement(self, lista_variables, c_funcion):
-        retornar_valor = {
-            'estructura': 'mientras',
-            'argumento': None,
-            'cola': []
-        }
-        this.avanza_token()
-
-        if this.token_actual != '(':
-            throw "Se esperaba '(' para indicar el argumento lógico del 'while'")
-        this.avanza_token()
-
-        retornar_valor['argumento'] = this.expression(lista_variables)
-
-        if this.token_actual != ')':
-            throw "Se esperaba ')'")
-        this.avanza_token()
-
-        retornar_valor['cola'] = this.statement(lista_variables, c_funcion, True)
-
-        return retornar_valor
-
-    this.iterate_statement(self, lista_variables, c_funcion):
-        retornar_valor = {
-            'estructura': 'repite',
-            'argumento': None,
-            'cola': []
-        }
-
-        this.avanza_token()
-
-        if this.token_actual != '(':
-            throw "Se esperaba '(' para indicar el argumento de iterate")
-        this.avanza_token()
-
-        retornar_valor['argumento'] = this.int_exp(lista_variables)
-
-        if this.token_actual != ')':
-            throw "Se esperaba ')' para cerrar el argumento de iterate")
-        this.avanza_token()
-
-        retornar_valor['cola'] = this.statement(lista_variables, c_funcion, True)
-
-        return retornar_valor
-
-    this.int_exp(self, lista_variables):
-        retornar_valor = None
-        #En este punto hay que verificar que se trate de un numero entero
-        es_numero = false
-        if this.es_numero(this.token_actual):
-            #Intentamos convertir el numero
-            retornar_valor = int(this.token_actual)
-            es_numero = True
-        else:
-            #No era un entero
-            if this.token_actual in this.expresiones_enteras_java:
-                retornar_valor = {
-                    this.traducir(this.token_actual): None
+    this.es_identificador_valido = function(token){
+        /* Identifica cuando una cadena es un identificador valido,
+        osea que puede ser usado en el nombre de una variable, las
+        reglas son:
+        * Debe comenzar en una letra
+        * Sólo puede tener letras, números, '-' y '_' */
+        es_valido = true
+        for (var i=0;i<token.length;i++){
+            if (i == 0){
+                if(ascii_letters.indexOf(token[i]) == -1){
+                    //Un identificador válido comienza con una letra
+                    es_valido = false
                 }
-                this.avanza_token()
-                if this.token_actual == '(':
-                    this.avanza_token()
-                    retornar_valor[retornar_valor.keys()[0]] = this.int_exp(lista_variables)
-                    if this.token_actual == ')':
-                        this.avanza_token()
-                    else:
-                        throw "Se esperaba ')'")
-                else:
-                    throw "Se esperaba '(' para indicar argumento de succ o pred")
-            else if this.token_actual ! in this.palabras_reservadas_java and this.es_identificador_valido(this.token_actual):
-                #Se trata de una variable definida por el usuario
-                if this.token_actual ! in lista_variables:
-                    throw "La variable '%s' no está definida en este contexto"%this.token_actual)
-                retornar_valor = this.token_actual
-                this.avanza_token()
-            else:
-                throw "Se esperaba un entero, variable, succ o pred, '%s' no es válido"%this.token_actual)
-        if es_numero:
-            #Si se pudo convertir, avanzamos
-            this.avanza_token()
+            } else {
+                if((this.lexer.palabras+this.lexer.numeros).indexOf(token[i]) == -1){
+                    es_valido = False
+                    break
+                }
+            }
+            i += 1
+        }
+        return es_valido
+    }
 
-        return retornar_valor
-
-    this.expression(self, lista_variables):
-        retornar_valor = {'o': [this.and_clause(lista_variables)]} #Lista con las expresiones 'o'
-
-        while this.token_actual == '||':
-            this.avanza_token()
-            retornar_valor['o'].append(this.and_clause(lista_variables))
-
-        return retornar_valor
-
-    this.and_clause(self, lista_variables):
-        retornar_valor = {'y': [this.not_clause(lista_variables)]}
-
-        while this.token_actual == '&&':
-            this.avanza_token()
-            retornar_valor['y'].append(this.not_clause(lista_variables))
-
-        return retornar_valor
-
-    this.not_clause(self, lista_variables):
-        retornar_valor = None
-
-        if this.token_actual == '!':
-            this.avanza_token()
-            retornar_valor = {'no': this.atom_clause(lista_variables)}
-        else:
-            retornar_valor = this.atom_clause(lista_variables)
-
-        return retornar_valor
-
-    this.atom_clause(self, lista_variables):
-        retornar_valor = None
-
-        if this.token_actual == 'iszero':
-            this.avanza_token()
-            if this.token_actual == '(':
-                this.avanza_token()
-                retornar_valor = {'si-es-cero': this.int_exp(lista_variables)}
-                if this.token_actual == ')':
-                    this.avanza_token()
-                else:
-                    throw "Se esperaba ')'")
-            else:
-                throw "Se esperaba '(' para indicar argumento de 'iszero'")
-        else if this.token_actual == '(':
-            this.avanza_token()
-            retornar_valor = this.expression(lista_variables)
-            if this.token_actual == ')':
-                this.avanza_token()
-            else:
-                throw "Se esperaba ')'")
-        else:
-            retornar_valor = this.boolean_function()
-            if this.token_actual == '(':
-                this.empty_arguments()
-
-        return retornar_valor
-
-    this.boolean_function(self):
-        retornar_valor = ""
-
-        if this.token_actual in this.condiciones_java:
-            retornar_valor = this.traducir(this.token_actual)
-            this.avanza_token()
-        else:
-            throw "Se esperaba una condición como 'nextToABeeper', '%s' no es una condición"%this.token_actual)
-
-        return retornar_valor
-
-    this.bloque(self):
-        """
+    this.bloque = function(){
+        /*
         Define un bloque en la sitaxis de karel
         {BLOQUE ::=
                 [DeclaracionDeProcedimiento ";" | DeclaracionDeEnlace ";"] ...
@@ -777,242 +491,61 @@ KGrammar = function(lexer, strict, futuro, strong_logic){
         }
         Un bloque se compone de todo el codigo admitido entre iniciar-programa
         y finalizar-programa
-        """
+        */
 
-        while this.token_actual == 'define-nueva-instruccion' || this.token_actual == 'define-prototipo-instruccion' || this.token_actual == 'externo':
-            if this.token_actual == 'define-nueva-instruccion':
+        while (this.token_actual.token == 'define-nueva-instruccion' || this.token_actual.token == 'define-prototipo-instruccion' || this.token_actual.token == 'externo'){
+            if (this.token_actual.token == 'define-nueva-instruccion')
                 this.declaracion_de_procedimiento()
-            else if this.token_actual == 'define-prototipo-instruccion':
+            else if (this.token_actual.token == 'define-prototipo-instruccion')
                 this.declaracion_de_prototipo()
-            else:
-                #Se trata de una declaracion de enlace
+            else {
+                //Se trata de una declaracion de enlace
                 this.declaracion_de_enlace()
-        #Toca verificar que todos los prototipos se hayan definido
-        for funcion in this.prototipo_funciones.keys():
-            if ! this.funciones.has_key(funcion):
-                throw "La instrucción '%s' tiene prototipo pero no fue definida"%funcion)
-        #Sigue el bloque con la lógica del programa
-        if this.token_actual == 'inicia-ejecucion':
+            }
+        }
+        //Toca verificar que todos los prototipos se hayan definido
+        for(funcion in this.prototipo_funciones){
+            if(! funcion in this.funciones){
+                throw "La instrucción '"+funcion+"' tiene prototipo pero no fue definida"
+            }
+        }
+        //Sigue el bloque con la lógica del programa
+        if (this.token_actual.token == 'inicia-ejecucion'){
             this.avanza_token()
             this.arbol['main'] = this.expresion_general([], false, false)
-            if this.token_actual != 'termina-ejecucion':
-                throw "Se esperaba 'termina-ejecucion' al final del bloque lógico del programa, encontré '%s'"%this.token_actual)
-            else:
+            if (this.token_actual.token != 'termina-ejecucion')
+                throw "Se esperaba 'termina-ejecucion' al final del bloque lógico del programa, encontré '"+this.token_actual+"'"
+            else
                 this.avanza_token()
-
-    this.clausula_atomica(self, lista_variables):
-        """
-        Define una clausila atomica
-        {
-        ClausulaAtomica ::=  {
-                              "SI-ES-CERO" "(" ExpresionEntera ")" |
-                              FuncionBooleana |
-                              "(" Termino ")"
-                             }{
         }
-        """
-        retornar_valor = None
+    }
 
-        if this.token_actual == 'si-es-cero':
-            this.avanza_token()
-            if this.token_actual == '(':
+    this.expresion_general = function(lista_variables, c_funcion, c_bucle){
+        /*
+        Define una expresion general
+        { Expresion | ExpresionVacia }
+        Generalmente se trata de una expresión dentro de las etiquetas
+        'inicio' y 'fin' o entre 'inicia-ejecucion' y 'termina-ejecucion'
+        */
+        retornar_valor = [] //Una lista de funciones
+
+        while (this.token_actual.token != 'fin' && this.token_actual.token != 'termina-ejecucion'){
+            retornar_valor = retornar_valor.concat(this.expresion(lista_variables, c_funcion, c_bucle))
+            if (this.token_actual.token != ';' && this.token_actual.token != 'fin' && this.token_actual.token != 'termina-ejecucion')
+                throw "Se esperaba ';'"
+            else if (this.token_actual == ';')
                 this.avanza_token()
-                retornar_valor = {'si-es-cero': this.expresion_entera(lista_variables)}
-                if this.token_actual == ')':
-                    this.avanza_token()
-                else:
-                    throw "Se esperaba ')'")
-            else:
-                throw "Se esperaba '(' para indicar argumento de 'si-es-cero'")
-        else if this.token_actual == '(':
-            this.avanza_token()
-            retornar_valor = this.termino(lista_variables)
-            if this.token_actual == ')':
-                this.avanza_token()
-            else:
-                throw "Se esperaba ')'")
-        else:
-            retornar_valor = this.funcion_booleana()
+            else if (this.token_actual == 'fin')
+                throw "Se esperaba ';'"
+            else if (this.token_actual == 'termina-ejecucion')
+                throw "Se esperaba ';'"
+        }
 
         return retornar_valor
+    }
 
-    this.clausula_no(self, lista_variables):
-        """
-        Define una clausula de negacion
-        {
-            ClausulaNo ::= ["NO"] ClausulaAtomica
-        }
-        """
-        retornar_valor = None
-
-        if this.token_actual == 'no':
-            this.avanza_token()
-            retornar_valor = {'no': this.clausula_atomica(lista_variables)}
-        else:
-            retornar_valor = this.clausula_atomica(lista_variables)
-
-        return retornar_valor
-
-    this.clausula_y(self, lista_variables):
-        """
-        Define una clausula conjuntiva
-        {
-            ClausulaY ::= ClausulaNo ["Y" ClausulaNo]...
-        }
-        """
-        retornar_valor = {'y': [this.clausula_no(lista_variables)]}
-
-        while this.token_actual == 'y':
-            this.avanza_token()
-            retornar_valor['y'].append(this.clausula_no(lista_variables))
-
-        return retornar_valor
-
-    this.declaracion_de_procedimiento(self):
-        """
-        Define una declaracion de procedimiento
-        {
-            DeclaracionDeProcedimiento ::= "DEFINE-NUEVA-INSTRUCCION" Identificador ["(" Identificador ")"] "COMO"
-                                         Expresion
-        }
-        Aqui se definen las nuevas funciones que extienden el lenguaje
-        de Karel, como por ejemplo gira-derecha.
-        """
-
-        this.avanza_token()
-
-        requiere_parametros = false #Indica si la funcion a definir tiene parametros
-        nombre_funcion = ''
-
-        if this.token_actual in this.palabras_reservadas || ! this.es_identificador_valido(this.token_actual):
-            throw "Se esperaba un nombre de procedimiento vÃ¡lido, '%s' no lo es"%this.token_actual)
-
-        if this.funciones.has_key(this.token_actual):
-            throw "Ya se ha definido una funcion con el nombre '%s'"%this.token_actual)
-        else:
-            this.funciones.update({this.token_actual: []})
-            nombre_funcion = this.token_actual
-
-        this.arbol['funciones'].update({
-            nombre_funcion : {
-                'params': [],
-                'cola': []
-            }
-        })
-
-        this.avanza_token()
-
-        if this.token_actual == 'como':
-            this.avanza_token()
-        else if this.token_actual == '(':
-            this.avanza_token()
-            requiere_parametros = True
-            while True:
-                if this.token_actual in this.palabras_reservadas || ! this.es_identificador_valido(this.token_actual):
-                    throw "Se esperaba un nombre de variable, '%s' no es válido"%this.token_actual)
-                else:
-                    if this.token_actual in this.funciones[nombre_funcion]:
-                        throw "La funcion '%s' ya tiene un parámetro con el nombre '%s'"%(nombre_funcion, this.token_actual))
-                    else:
-                        this.funciones[nombre_funcion].append(this.token_actual)
-                        this.avanza_token()
-
-                    if this.token_actual == ')':
-                        this.lexer.push_token(')') #Devolvemos el token a la pila
-                        break
-                    else if this.token_actual == ',':
-                        this.avanza_token()
-                    else:
-                        throw "Se esperaba ',', encontré '%s'"%this.token_actual)
-            this.arbol['funciones'][nombre_funcion]['params'] = this.funciones[nombre_funcion]
-        else:
-            throw "Se esperaba la palabra clave 'como' o un parametro")
-
-        if requiere_parametros:
-            this.avanza_token()
-            if this.token_actual != ')':
-                throw "Se esperaba ')'")
-            this.avanza_token()
-            if this.token_actual != 'como':
-                throw "se esperaba la palabra clave 'como'")
-            this.avanza_token()
-
-        if this.prototipo_funciones.has_key(nombre_funcion):
-            #Hay que verificar que se defina como se planeó
-            if len(this.prototipo_funciones[nombre_funcion]) != len(this.funciones[nombre_funcion]):
-                throw "La función '%s' no está definida como se planeó en el prototipo, verifica el número de variables"%nombre_funcion)
-
-        this.arbol['funciones'][nombre_funcion]['cola'] = this.expresion(this.funciones[nombre_funcion], True, false)
-
-        if this.token_actual != ';':
-            throw "Se esperaba ';'")
-        else:
-            this.avanza_token()
-
-    this.declaracion_de_prototipo(self):
-        """
-        Define una declaracion de prototipo
-        {
-            DeclaracionDePrototipo ::= "DEFINE-PROTOTIPO-INSTRUCCION" Identificador ["(" Identificador ")"]
-        }
-        Los prototipos son definiciones de funciones que se hacen previamente
-        para poderse utilizar dentro de una función declarada antes.
-        """
-
-        requiere_parametros = false
-        nombre_funcion = ''
-        this.avanza_token()
-
-        if this.token_actual in this.palabras_reservadas || ! this.es_identificador_valido(this.token_actual):
-            throw "Se esperaba un nombre de función, '%s' no es válido"%this.token_actual)
-        if this.prototipo_funciones.has_key(this.token_actual):
-            throw "Ya se ha definido un prototipo de funcion con el nombre '%s'"%this.token_actual)
-        else:
-            this.prototipo_funciones.update({this.token_actual: []})
-            nombre_funcion = this.token_actual
-
-        this.avanza_token()
-
-        if this.token_actual == ';':
-            this.avanza_token();
-        else if this.token_actual == '(':
-            this.avanza_token()
-            requiere_parametros = True
-            while True:
-                if this.token_actual in this.palabras_reservadas || ! this.es_identificador_valido(this.token_actual):
-                    throw "Se esperaba un nombre de variable, '%s' no es válido"%this.token_actual)
-                else:
-                    if this.token_actual in this.prototipo_funciones[nombre_funcion]:
-                        throw "El prototipo de función '%s' ya tiene un parámetro con el nombre '%s'"%(nombre_funcion, this.token_actual))
-                    else:
-                        this.prototipo_funciones[nombre_funcion].append(this.token_actual)
-                        this.avanza_token()
-
-                    if this.token_actual == ')':
-                        this.lexer.push_token(')') #Devolvemos el token a la pila
-                        break
-                    else if this.token_actual == ',':
-                        this.avanza_token()
-                    else:
-                        throw "Se esperaba ',', encontré '%s'"%this.token_actual)
-        else:
-            throw "Se esperaba ';' o un parámetro")
-
-        if requiere_parametros:
-            this.avanza_token()
-            if this.token_actual != ')':
-                throw "Se esperaba ')'")
-            this.avanza_token()
-            if this.token_actual != ';':
-                throw "Se esperaba ';'")
-            this.avanza_token()
-
-    this.declaracion_de_enlace (self):
-        """ Se utilizara para tomar funciones de librerias externas,
-        aun no implementado"""
-
-    this.expresion(self, lista_variables, c_funcion, c_bucle):
-        """
+    this.expresion = function(lista_variables, c_funcion, c_bucle){
+        /*
         Define una expresion
         {
         Expresion :: = {
@@ -1034,197 +567,173 @@ KGrammar = function(lexer, strict, futuro, strong_logic){
         Recibe para comprobar una lista con las variables válidas en
         este contexto, tambien comprueba mediante c_funcion si esta en
         un contexto donde es valido el sal-de-instruccion.
-        """
+        */
         retornar_valor = []
 
-        if this.token_actual in this.instrucciones:
-            if this.token_actual == 'sal-de-instruccion':
-                if c_funcion:
-                    retornar_valor = [this.token_actual]
+        if(this.instrucciones.indexOf(this.token_actual.token) != -1){
+            if (this.token_actual.token == 'sal-de-instruccion'){
+                if (c_funcion){
+                    retornar_valor = [this.token_actual.token]
                     this.avanza_token()
-                else:
-                    throw "No es posible usar 'sal-de-instruccion' fuera de una instruccion :)")
-            else if this.token_actual == 'sal-de-bucle' || this.token_actual == 'continua-bucle':
-                if c_bucle:
-                    retornar_valor = [this.token_actual]
+                } else
+                    throw "No es posible usar 'sal-de-instruccion' fuera de una instruccion :)"
+            } else if (this.token_actual.token == 'sal-de-bucle' || this.token_actual.token == 'continua-bucle'){
+                if (c_bucle){
+                    retornar_valor = [this.token_actual.token]
                     this.avanza_token()
-                else:
-                    throw "No es posible usar '"+this.token_actual.token+"' fuera de un bucle :)")
-            else:
-                if this.token_actual == 'apagate':
-                    this.tiene_apagate = True
-                retornar_valor = [this.token_actual]
+                } else
+                    throw "No es posible usar '"+this.token_actual.token+"' fuera de un bucle :)"
+            } else{
+                if (this.token_actual.token == 'apagate')
+                    this.tiene_apagate = true
+                retornar_valor = [this.token_actual.token]
                 this.avanza_token()
-        else if this.token_actual == 'si':
+            }
+        } else if (this.token_actual.token == 'si')
             retornar_valor = [this.expresion_si(lista_variables, c_funcion, c_bucle)]
-        else if this.token_actual == 'mientras':
+        else if (this.token_actual.token == 'mientras')
             retornar_valor = [this.expresion_mientras(lista_variables, c_funcion)]
-        else if this.token_actual == 'repite' || this.token_actual == 'repetir':
+        else if (this.token_actual.token == 'repite' || this.token_actual.token == 'repetir')
             retornar_valor = [this.expresion_repite(lista_variables, c_funcion)]
-        else if this.token_actual == 'inicio':
+        else if (this.token_actual.token == 'inicio'){
             this.avanza_token()
             retornar_valor = this.expresion_general(lista_variables, c_funcion, c_bucle)
-            if this.token_actual == 'fin':
+            if (this.token_actual.token == 'fin')
                 this.avanza_token()
-            else:
-                throw "Se esperaba 'fin' para concluir el bloque, encontré '%s'"%this.token_actual)
-        else if this.token_actual ! in this.palabras_reservadas and this.es_identificador_valido(this.token_actual):
-            #Se trata de una instrucción creada por el usuario
-            if this.prototipo_funciones.has_key(this.token_actual) || this.funciones.has_key(this.token_actual):
-                nombre_funcion = this.token_actual
+            else
+                throw "Se esperaba 'fin' para concluir el bloque, encontré '"+this.token_actual+"'"
+        } else if (this.palabras_reservadas.indexOf(this.token_actual.token) == -1 && this.es_identificador_valido(this.token_actual.token)){
+            //Se trata de una instrucción creada por el usuario
+            if (this.token_actual.token in this.prototipo_funciones || this.token_actual.token in this.funciones){
+                nombre_funcion = this.token_actual.token
                 retornar_valor = [{
                     'estructura': 'instruccion',
                     'nombre': nombre_funcion,
                     'argumento': []
                 }]
                 this.avanza_token()
-                requiere_parametros = True
+                requiere_parametros = true
                 num_parametros = 0
-                if this.token_actual == '(':
+                if (this.token_actual.token == '('){
                     this.avanza_token()
-                    while True:
-                        retornar_valor[0]['argumento'].append(this.expresion_entera(lista_variables))
+                    while (true){
+                        retornar_valor[0]['argumento'].push(this.expresion_entera(lista_variables))
                         num_parametros += 1
-                        if this.token_actual == ')':
-                            #this.lexer.push_token(')') #Devolvemos el token a la pila
+                        if (this.token_actual.token == ')'){
+                            //this.lexer.push_token(')') #Devolvemos el token a la pila
                             break
-                        else if this.token_actual == ',':
+                        } else if (this.token_actual.token == ',')
                             this.avanza_token()
-                        else:
-                            throw "Se esperaba ',', encontré '%s'"%this.token_actual)
-                    if ! this.futuro and num_parametros>1:
-                        throw "No están habilitadas las funciones con varios parámetros")
+                        else
+                            throw "Se esperaba ',', encontré '"+this.token_actual+"'"
+                    }
+                    if (! this.futuro && num_parametros>1)
+                        throw "No están habilitadas las funciones con varios parámetros"
                     this.avanza_token()
-                if this.prototipo_funciones.has_key(nombre_funcion):
-                    if num_parametros != len(this.prototipo_funciones[nombre_funcion]):
-                        throw "Estas intentando llamar la funcion '%s' con %d parámetros, pero así no fue definida"%(nombre_funcion, num_parametros))
-                else:
-                    if num_parametros != len(this.funciones[nombre_funcion]):
-                        throw "Estas intentando llamar la funcion '%s' con %d parámetros, pero así no fue definida"%(nombre_funcion, num_parametros))
-            else:
-                throw "La instrucción '%s' no ha sido previamente definida, pero es utilizada"%this.token_actual)
-        else:
-            throw "Se esperaba un procedimiento, '%s' no es válido"%this.token_actual)
-
-        return retornar_valor
-
-    this.expresion_entera(self, lista_variables):
-        """
-        Define una expresion numerica entera
-        {
-            ExpresionEntera ::= { Decimal | Identificador | "PRECEDE" "(" ExpresionEntera ")" | "SUCEDE" "(" ExpresionEntera ")" }{
-        }
-        """
-        retornar_valor = None
-        #En este punto hay que verificar que se trate de un numero entero
-        es_numero = false
-        if this.es_numero(this.token_actual):
-            #Intentamos convertir el numero
-            retornar_valor = int(this.token_actual)
-            es_numero = True
-        else:
-            #No era un entero
-            if this.token_actual in this.expresiones_enteras:
-                retornar_valor = {
-                    this.token_actual: None
                 }
-                this.avanza_token()
-                if this.token_actual == '(':
-                    this.avanza_token()
-                    retornar_valor[retornar_valor.keys()[0]] = this.expresion_entera(lista_variables)
-                    if this.token_actual == ')':
-                        this.avanza_token()
-                    else:
-                        throw "Se esperaba ')'")
-                else:
-                    throw "Se esperaba '(' para indicar argumento de precede o sucede")
-            else if this.token_actual ! in this.palabras_reservadas and this.es_identificador_valido(this.token_actual):
-                #Se trata de una variable definida por el usuario
-                if this.token_actual ! in lista_variables:
-                    throw "La variable '%s' no está definida en este contexto"%this.token_actual)
-                retornar_valor = this.token_actual
-                this.avanza_token()
-            else:
-                throw "Se esperaba un entero, variable, sucede o predece, '%s' no es válido"%this.token_actual)
-        if es_numero:
-            #Si se pudo convertir, avanzamos
+                if (nombre_funcion in this.prototipo_funciones){
+                    if (num_parametros != this.prototipo_funciones[nombre_funcion].length)
+                        throw "Estas intentando llamar la funcion '"+nombre_funcion+"' con "+num_parametros+" parámetros, pero así no fue definida"
+                } else{
+                    if (num_parametros != this.funciones[nombre_funcion].length)
+                        throw "Estas intentando llamar la funcion '"+nombre_funcion+"' con "+num_parametros+" parámetros, pero así no fue definida"
+                }
+            } else
+                throw "La instrucción '"+this.token_actual+"' no ha sido previamente definida, pero es utilizada"
+        } else
+            throw "Se esperaba un procedimiento, '"+this.token_actual+"' no es válido"
+
+        return retornar_valor
+    }
+
+    this.declaracion_de_procedimiento = function(){
+        /*
+        Define una declaracion de procedimiento
+        {
+            DeclaracionDeProcedimiento ::= "DEFINE-NUEVA-INSTRUCCION" Identificador ["(" Identificador ")"] "COMO"
+                                         Expresion
+        }
+        Aqui se definen las nuevas funciones que extienden el lenguaje
+        de Karel, como por ejemplo gira-derecha.
+        */
+
+        this.avanza_token()
+
+        requiere_parametros = false //Indica si la funcion a definir tiene parametros
+        nombre_funcion = ''
+
+        if (this.palabras_reservadas.indexOf(this.token_actual.token) != -1 || ! this.es_identificador_valido(this.token_actual.token))
+            throw "Se esperaba un nombre de procedimiento válido, '"+this.token_actual+"' no lo es"
+
+        if (this.token_actual.token in this.funciones)
+            throw "Ya se ha definido una funcion con el nombre '"+this.token_actual+"'"
+        else{
+            this.funciones[this.token_actual.token] = []
+            nombre_funcion = this.token_actual.token
+        }
+
+        this.arbol['funciones'][nombre_funcion] = {
+            'params': [],
+            'cola': []
+        }
+
+        this.avanza_token()
+
+        if (this.token_actual.token == 'como')
             this.avanza_token()
+        else if (this.token_actual.token == '('){
+            this.avanza_token()
+            requiere_parametros = true
+            while (true){
+                if (this.palabras_reservadas.indexOf(this.token_actual.token) != -1 || ! this.es_identificador_valido(this.token_actual.token))
+                    throw "Se esperaba un nombre de variable, '"+this.token_actual+"' no es válido"
+                else {
+                    if (this.funciones[nombre_funcion].indexOf(this.token_actual.token) != -1)
+                        throw "La funcion '"+nombre_funcion+"' ya tiene un parámetro con el nombre '"+this.token_actual+"'"
+                    else{
+                        this.funciones[nombre_funcion].push(this.token_actual.token)
+                        this.avanza_token()
+                    }
 
-        return retornar_valor
+                    if (this.token_actual.token == ')'){
+                        this.lexer.push_token(this.token_actual) //Devolvemos el token a la pila
+                        break
+                    } else if (this.token_actual.token == ',')
+                        this.avanza_token()
+                    else
+                        throw "Se esperaba ',', encontré '"+this.token_actual+"'"
+                }
+            }
+            this.arbol['funciones'][nombre_funcion]['params'] = this.funciones[nombre_funcion]
+        } else
+            throw "Se esperaba la palabra clave 'como' o un parametro"
 
-    this.expresion_general(self, lista_variables, c_funcion, c_bucle):
-        """
-        Define una expresion general
-        { Expresion | ExpresionVacia }
-        Generalmente se trata de una expresión dentro de las etiquetas
-        'inicio' y 'fin' o entre 'inicia-ejecucion' y 'termina-ejecucion'
-        """
-        retornar_valor = [] #Una lista de funciones
-
-        while this.token_actual != 'fin' and this.token_actual != 'termina-ejecucion':
-            retornar_valor += this.expresion(lista_variables, c_funcion, c_bucle)
-            if this.token_actual != ';' and this.token_actual != 'fin' and this.token_actual != 'termina-ejecucion':
-                throw "Se esperaba ';'")
-            else if this.token_actual == ';':
-                this.avanza_token()
-            else if this.token_actual == 'fin':
-                throw "Se esperaba ';'")
-            else if this.token_actual == 'termina-ejecucion':
-                throw "Se esperaba ';'")
-
-        return retornar_valor
-
-    this.expresion_mientras(self, lista_variables, c_funcion):
-        """
-        Define la expresion del bucle MIENTRAS
-        {
-        ExpresionMientras ::= "Mientras" Termino "hacer"
-                                  Expresion
-        }
-        """
-        retornar_valor = {
-            'estructura': 'mientras',
-            'argumento': None,
-            'cola': []
-        }
-        this.avanza_token()
-
-        retornar_valor['argumento'] = this.termino(lista_variables)
-
-        if this.token_actual != 'hacer':
-            throw "Se esperaba 'hacer'")
-        this.avanza_token()
-        retornar_valor['cola'] = this.expresion(lista_variables, c_funcion, True)
-
-        return retornar_valor
-
-    this.expresion_repite(self, lista_variables, c_funcion):
-        """
-        Define la expresion del bucle REPITE
-        {
-        ExpresionRepite::= "repetir" ExpresionEntera "veces"
-                              Expresion
-        }
-        """
-        retornar_valor = {
-            'estructura': 'repite',
-            'argumento': None,
-            'cola': []
+        if (requiere_parametros){
+            this.avanza_token()
+            if (this.token_actual.token != ')')
+                throw "Se esperaba ')'"
+            this.avanza_token()
+            if (this.token_actual.token != 'como')
+                throw "se esperaba la palabra clave 'como'"
+            this.avanza_token()
         }
 
-        this.avanza_token()
-        retornar_valor['argumento'] = this.expresion_entera(lista_variables)
+        if (nombre_funcion in this.prototipo_funciones){
+            //Hay que verificar que se defina como se planeó
+            if (this.prototipo_funciones[nombre_funcion].length != this.funciones[nombre_funcion].length)
+                throw "La función '"+nombre_funcion+"' no está definida como se planeó en el prototipo, verifica el número de variables"
+        }
 
-        if this.token_actual != 'veces':
-            throw "Se esperaba la palabra 'veces', '%s' no es válido"%this.token_actual)
+        this.arbol['funciones'][nombre_funcion]['cola'] = this.expresion(this.funciones[nombre_funcion], true, false)
 
-        this.avanza_token()
-        retornar_valor['cola'] = this.expresion(lista_variables, c_funcion, True)
+        if (this.token_actual.token != ';')
+            throw "Se esperaba ';'"
+        else
+            this.avanza_token()
+    }
 
-        return retornar_valor
-
-    this.expresion_si(self, lista_variables, c_funcion, c_bucle):
-        """
+    this.expresion_si = function(lista_variables, c_funcion, c_bucle){
+        /*
         Define la expresion del condicional SI
         {
         ExpresionSi ::= "SI" Termino "ENTONCES"
@@ -1233,33 +742,125 @@ KGrammar = function(lexer, strict, futuro, strong_logic){
                                Expresion
                         ]
         }
-        """
-        retornar_valor = {
+        */
+        retornar_valor_si = {
             'estructura': 'si',
-            'argumento': None,
+            'argumento': undefined,
             'cola': []
         }
 
         this.avanza_token()
 
-        retornar_valor['argumento'] = this.termino(lista_variables)
+        retornar_valor_si['argumento'] = this.termino(lista_variables)
 
-        if this.token_actual != 'entonces':
-            throw "Se esperaba 'entonces'")
+        if (this.token_actual.token != 'entonces')
+            throw "Se esperaba 'entonces'"
 
         this.avanza_token()
 
-        retornar_valor['cola'] = this.expresion(lista_variables, c_funcion, c_bucle)
+        retornar_valor_si['cola'] = this.expresion(lista_variables, c_funcion, c_bucle)
 
-        if this.token_actual == 'sino':
-            retornar_valor.update({'sino-cola': []})
+        if (this.token_actual.token == 'sino') {
+            retornar_valor_si['sino-cola'] = []
             this.avanza_token()
-            retornar_valor['sino-cola'] = this.expresion(lista_variables, c_funcion, c_bucle)
+            retornar_valor_si['sino-cola'] = this.expresion(lista_variables, c_funcion, c_bucle)
+        }
+
+        return retornar_valor_si
+    }
+
+    this.termino = function(lista_variables){
+        /*
+        Define un termino
+        {
+            Termino ::= ClausulaY [ "o" ClausulaY] ...
+        }
+        Se usan dentro de los condicionales 'si' y el bucle 'mientras'
+        */
+        retornar_valor = {'o': [this.clausula_y(lista_variables)]} //Lista con las expresiones 'o'
+
+        while (this.token_actual.token == 'o' || this.token_actual.token == 'u'){
+            this.avanza_token()
+            retornar_valor['o'].push(this.clausula_y(lista_variables))
+        }
 
         return retornar_valor
+    }
 
-    this.funcion_booleana(self):
-        """
+    this.clausula_y = function(lista_variables){
+        /*
+        Define una clausula conjuntiva
+        {
+            ClausulaY ::= ClausulaNo ["Y" ClausulaNo]...
+        }
+        */
+        retornar_valor = {'y': [this.clausula_no(lista_variables)]}
+
+        while (this.token_actual.token == 'y'){
+            this.avanza_token()
+            retornar_valor['y'].push(this.clausula_no(lista_variables))
+        }
+
+        return retornar_valor
+    }
+
+    this.clausula_no = function(lista_variables){
+        /*
+        Define una clausula de negacion
+        {
+            ClausulaNo ::= ["NO"] ClausulaAtomica
+        }
+        */
+        retornar_valor = undefined
+
+        if (this.token_actual.token == 'no'){
+            this.avanza_token()
+            retornar_valor = {'no': this.clausula_atomica(lista_variables)}
+        } else
+            retornar_valor = this.clausula_atomica(lista_variables)
+
+        return retornar_valor
+    }
+
+    this.clausula_atomica = function(lista_variables){
+        /*
+        Define una clausila atomica
+        {
+        ClausulaAtomica ::=  {
+                              "SI-ES-CERO" "(" ExpresionEntera ")" |
+                              FuncionBooleana |
+                              "(" Termino ")"
+                             }{
+        }
+        */
+        retornar_valor = undefined
+
+        if (this.token_actual.token == 'si-es-cero'){
+            this.avanza_token()
+            if (this.token_actual.token == '('){
+                this.avanza_token()
+                retornar_valor = {'si-es-cero': this.expresion_entera(lista_variables)}
+                if (this.token_actual.token == ')')
+                    this.avanza_token()
+                else
+                    throw "Se esperaba ')'"
+            } else
+                throw "Se esperaba '(' para indicar argumento de 'si-es-cero'"
+        } else if (this.token_actual.token == '('){
+            this.avanza_token()
+            retornar_valor = this.termino(lista_variables)
+            if (this.token_actual.token == ')')
+                this.avanza_token()
+            else
+                throw "Se esperaba ')'"
+        } else
+            retornar_valor = this.funcion_booleana()
+
+        return retornar_valor
+    }
+
+    this.funcion_booleana = function(){
+        /*
         Define una funcion booleana del mundo de karel
         {
         FuncionBooleana ::= {
@@ -1286,326 +887,234 @@ KGrammar = function(lexer, strict, futuro, strong_logic){
                             }{
         }
         Son las posibles funciones booleanas para Karel
-        """
+        */
         retornar_valor = ""
 
-        if this.token_actual in this.condiciones:
-            retornar_valor = this.token_actual
+        if (this.condiciones.indexOf(this.token_actual.token) != -1){
+            retornar_valor = this.token_actual.token
             this.avanza_token()
-        else:
-            throw "Se esperaba una condición como 'frente-libre', '%s' no es una condición"%this.token_actual)
+        } else
+            throw "Se esperaba una condición como 'frente-libre', '"+this.token_actual+"' no es una condición"
 
         return retornar_valor
+    }
 
-    this.termino(self, lista_variables):
-        """
-        Define un termino
+    this.expresion_mientras = function(lista_variables, c_funcion){
+        /*
+        Define la expresion del bucle MIENTRAS
         {
-            Termino ::= ClausulaY [ "o" ClausulaY] ...
+        ExpresionMientras ::= "Mientras" Termino "hacer"
+                                  Expresion
         }
-        Se usan dentro de los condicionales 'si' y el bucle 'mientras'
-        """
-        retornar_valor = {'o': [this.clausula_y(lista_variables)]} #Lista con las expresiones 'o'
+        */
+        retornar_valor_mientras = {
+            'estructura': 'mientras',
+            'argumento': undefined,
+            'cola': []
+        }
+        this.avanza_token()
 
-        while this.token_actual == 'o' || this.token_actual == 'u':
-            this.avanza_token()
-            retornar_valor['o'].append(this.clausula_y(lista_variables))
+        retornar_valor_mientras['argumento'] = this.termino(lista_variables)
 
-        return retornar_valor
+        if (this.token_actual.token != 'hacer')
+            throw "Se esperaba 'hacer'"
+        this.avanza_token()
+        retornar_valor_mientras['cola'] = this.expresion(lista_variables, c_funcion, true)
 
-    this.ruby_codeblock(self, lista_variables, c_funcion, c_bucle):
-        """Un bloque de sentencias de ruby"""
-        retornar_valor = []
-        while this.token_actual != '' and this.token_actual != 'fin':
-            retornar_valor += this.ruby_statement(lista_variables, c_funcion, c_bucle)
+        return retornar_valor_mientras
+    }
 
-        return retornar_valor
+    this.expresion_repite = function(lista_variables, c_funcion){
+        /*
+        Define la expresion del bucle REPITE
+        {
+        ExpresionRepite::= "repetir" ExpresionEntera "veces"
+                              Expresion
+        }
+        */
+        retornar_valor_repite = {
+            'estructura': 'repite',
+            'argumento': undefined,
+            'cola': []
+        }
 
-    this.ruby_statement(self, lista_variables, c_funcion, c_bucle):
-        """Una llamada, declaración o estructura de ruby"""
-        retornar_valor = []
+        this.avanza_token()
+        retornar_valor_repite['argumento'] = this.expresion_entera(lista_variables)
 
-        if this.token_actual in this.instrucciones:
-            if this.token_actual == 'sal-de-instruccion':
-                if c_funcion:
-                    retornar_valor = [this.token_actual]
-                    this.avanza_token()
-                else:
-                    throw "No es posible usar 'sal-de-instruccion' fuera de una instruccion :)")
-            else if this.token_actual == 'sal-de-bucle' || this.token_actual == 'continua-bucle':
-                if c_bucle:
-                    retornar_valor = [this.token_actual]
-                    this.avanza_token()
-                else:
-                    throw "No es posible usar '"+this.token_actual.token+"' fuera de un bucle :)")
-            else:
-                if this.token_actual == 'apagate':
-                    this.tiene_apagate = True
-                retornar_valor = [this.token_actual]
+        if (this.token_actual.token != 'veces')
+            throw "Se esperaba la palabra 'veces', '"+this.token_actual+"' no es válido"
+
+        this.avanza_token()
+        retornar_valor_repite['cola'] = this.expresion(lista_variables, c_funcion, true)
+
+        return retornar_valor_repite
+    }
+
+    this.expresion_entera = function(lista_variables){
+        /*
+        Define una expresion numerica entera
+        {
+            ExpresionEntera ::= { Decimal | Identificador | "PRECEDE" "(" ExpresionEntera ")" | "SUCEDE" "(" ExpresionEntera ")" }{
+        }
+        */
+        retornar_valor = undefined
+        //En este punto hay que verificar que se trate de un numero entero
+        es_numero = false
+        if (this.es_numero(this.token_actual.token)){
+            //Intentamos convertir el numero
+            retornar_valor = this.token_actual.token*1
+            es_numero = true
+        } else {
+            //No era un entero
+            if (this.expresiones_enteras.indexOf(this.token_actual.token) != -1){
+                expresion = this.token_actual.token
+                retornar_valor = {
+                    expresion: undefined
+                }
                 this.avanza_token()
-        else if this.token_actual == 'si':
-            retornar_valor = [this.ruby_if_statement(lista_variables, c_funcion, c_bucle)]
-        else if this.token_actual == 'mientras':
-            retornar_valor = [this.ruby_while_statement(lista_variables, c_funcion)]
-        else if this.es_numero(this.token_actual):
-            retornar_valor = [this.ruby_iterate_statement(lista_variables, c_funcion)]
-        else if this.token_actual == 'def':
-            if c_funcion || c_bucle:
-                throw "No se puede declarar una funcion dentro de otra o dentro de una estructura de control... aun")
-            retornar_valor = [this.ruby_method_declaration()]
-        else if this.token_actual ! in this.palabras_reservadas_ruby and this.es_identificador_valido(this.token_actual):
-            #Se trata de una instrucción creada por el usuario
-            nombre_funcion = this.token_actual
-            retornar_valor = [{
-                'estructura': 'instruccion',
-                'nombre': nombre_funcion,
-                'argumento': []
-            }]
-            this.avanza_token()
-
-            if this.token_actual != '(':
-                throw "Se esperaba '(' para indicar los parámetros de la funcion")
-            this.avanza_token()
-
-            num_parametros = 0
-            while this.token_actual != ')':
-                retornar_valor[0]['argumento'].append(this.int_exp(lista_variables))
-                num_parametros += 1
-                if this.token_actual == ')':
-                    break
-                else if this.token_actual == ',':
+                if (this.token_actual.token == '('){
                     this.avanza_token()
-                else:
-                    throw "Se esperaba ',', encontré '%s'"%this.token_actual)
-            this.avanza_token()
-
-            if ! this.futuro and num_parametros>1:
-                throw "No están habilitadas las funciones con varios parámetros")
-
-            this.llamadas_funciones.update({nombre_funcion: num_parametros}) #La usaremos para luego comparar existencias
-            if this.token_actual != ';':
-                throw "Se esperaba ';' después de una llamada a función")
-            else:
+                    retornar_valor[expresion] = this.expresion_entera(lista_variables)
+                    if (this.token_actual.token == ')')
+                        this.avanza_token()
+                    else
+                        throw "Se esperaba ')'"
+                } else
+                    throw "Se esperaba '(' para indicar argumento de precede o sucede"
+            } else if (this.palabras_reservadas.indexOf(this.token_actual.token) == -1 && this.es_identificador_valido(this.token_actual.token)){
+                //Se trata de una variable definida por el usuario
+                if (lista_variables.indexOf(this.token_actual.token) == -1)
+                    throw "La variable '"+this.token_actual+"' no está definida en este contexto"
+                retornar_valor = this.token_actual
                 this.avanza_token()
-        else:
-            throw "Se esperaba un procedimiento, '%s' no es válido"%this.token_actual)
+            } else
+                throw "Se esperaba un entero, variable, sucede o predece, '"+this.token_actual+"' no es válido"
+        }
+        if (es_numero){
+            //Si se pudo convertir, avanzamos
+            this.avanza_token()
+        }
 
         return retornar_valor
+    }
 
-    this.verificar_sintaxis (self):
-        """ Verifica que este correcta la gramatica de un programa
-        en karel """
-        if this.token_actual == 'iniciar-programa':
-            if this.avanza_token():
-                this.bloque()
-                if this.token_actual != 'finalizar-programa':
-                    throw "Se esperaba 'finalizar-programa' al final del codigo")
-            else:
-                throw "Codigo mal formado")
-        else if this.token_actual == 'class': #Está escrito en java
-            this.sintaxis = 'java'
-            this.lexer.establecer_sintaxis('java')
-            if this.avanza_token():
-                if this.es_identificador_valido(this.token_actual):
-                    this.nombre_clase = this.token_actual
-                    this.avanza_token()
-                    this.class_body()
+    this.es_numero = function(token){
+        /*Determina si un token es un numero*/
+        for (i=0;i<token.length;i++){
+            if (this.lexer.numeros.indexOf(token[i]) == -1)
+                return false //Encontramos algo que no es numero
+        }
+        return true
+    }
 
-                    #toca revisar las llamadas a funciones hechas durante el programa
-                    for funcion in this.llamadas_funciones:
-                        if this.funciones.has_key(funcion):
-                            if len(this.funciones[funcion]) != this.llamadas_funciones[funcion]:
-                                throw "La funcion '%s' no se llama con la misma cantidad de parámetros que como se definió"%funcion)
-                        else:
-                            throw "La función '%s' es llamada pero no fue declarada"%funcion)
-                else:
-                    throw '%s no es un identificador valido'%this.token_actual)
-            else:
-                throw "Codigo mal formado")
-        else:
-            this.sintaxis = 'ruby'
-            this.lexer.establecer_sintaxis('ruby')
-
-            this.arbol['main'] = this.ruby_codeblock([], false, false)
-        if this.strict and (! this.tiene_apagate):
-            throw "Tu código no tiene 'apagate', esto no es permitido en el modo estricto")
-
-    this.es_identificador_valido(self, token):
-        /* Identifica cuando una cadena es un identificador valido,
-        osea que puede ser usado en el nombre de una variable, las
-        reglas son:
-        * Debe comenzar en una letra
-        * Sólo puede tener letras, números, '-' y '_' */
-        es_valido = True
-        i = 0
-        for caracter in token:
-            if i == 0:
-                if caracter ! in ascii_letters:
-                    #Un identificador válido comienza con una letra
-                    es_valido = false
-                    break
-            else:
-                if caracter ! in this.lexer.palabras+this.lexer.numeros:
-                    es_valido = false
-                    break
-            i += 1
-        return es_valido
-
-    this.es_numero(self, token):
-        """Determina si un token es un numero"""
-        for caracter in token:
-            if caracter ! in this.lexer.numeros:
-                return false #Encontramos algo que no es numero
-        return True
-
-    this.guardar_compilado (self, nombrearchivo, expandir=false):
-        """ Guarda el resultado de una compilacion de codigo Karel a el
-        archivo especificado """
-        f = file(nombrearchivo, 'w')
-        if expandir:
-            f.write(json.dumps(this.arbol, indent=2))
-        else:
-            f.write(json.dumps(this.arbol))
-        f.close()
-
-    this.expandir_arbol(self):
-        """Expande el árbol de instrucciones para ser usado por krunner
-        durante la ejecución"""
-        for funcion in this.arbol['funciones']:#Itera sobre llaves
+    this.expandir_arbol = function(){
+        /*Expande el árbol de instrucciones para ser usado por krunner
+        durante la ejecución*/
+        for (funcion in this.arbol['funciones']){ //Itera sobre llaves
             nueva_funcion = {
                 funcion: {
                     'params': this.arbol['funciones'][funcion]['params']
                 }
             }
-            this.lista_programa.append(nueva_funcion)
-            posicion_inicio = len(this.lista_programa)-1
+            this.lista_programa.push(nueva_funcion)
+            posicion_inicio = this.lista_programa.length-1
 
-            this.ejecutable['indice_funciones'].update({
-                funcion: posicion_inicio
-            })
+            this.ejecutable['indice_funciones'][funcion] = posicion_inicio
             this.expandir_arbol_recursivo(this.arbol['funciones'][funcion]['cola'])
-            this.lista_programa.append({
+            this.lista_programa.push({
                 'fin': {
                     'estructura': 'instruccion',
                     'nombre': funcion,
                     'inicio': posicion_inicio
                 }
             })
-        this.ejecutable['main'] = len(this.lista_programa)
+        }
+        this.ejecutable['main'] = this.lista_programa.length
         this.expandir_arbol_recursivo(this.arbol['main'])
-        this.lista_programa.append('fin') #Marca de fin del programa
+        this.lista_programa.push('fin') //Marca de fin del programa
         this.ejecutable['lista'] = this.lista_programa
         return this.ejecutable
+    }
 
-    this.expandir_arbol_recursivo(self, cola):
-        """Toma un arbol y lo expande"""
-        for elem in cola: #Expande cada uno de los elementos de una cola
-            if elem in this.instrucciones:
-                this.lista_programa.append(elem)
-            else:#Se trata de un diccionario
-                if elem['estructura'] in ['repite', 'mientras']:
-                    posicion_inicio = len(this.lista_programa)
+    this.expandir_arbol_recursivo = function(cola){
+        /*Toma un arbol y lo expande*/
+        for(i=0;i<cola.length;i++){
+            elem = cola[i]
+            console.log(elem)
+            if (this.instrucciones.indexOf(elem) != -1){
+                this.lista_programa.push(elem)
+            } else { //Se trata de un diccionario
+                if (['repite', 'mientras'].indexOf(elem['estructura']) != -1){
+                    posicion_inicio = this.lista_programa.length
+                    estructura = elem['estructura']
                     nueva_estructura = {
-                        elem['estructura']: {
+                        estructura: {
                             'argumento': elem['argumento'],
                             'id': posicion_inicio
                         }
                     }
 
-                    this.lista_programa.append(nueva_estructura)
+                    this.lista_programa.push(nueva_estructura)
                     this.expandir_arbol_recursivo(elem['cola'])
-                    posicion_fin = len(this.lista_programa)
-                    this.lista_programa.append({
+                    posicion_fin = this.lista_programa.length
+                    this.lista_programa.push({
                         'fin': {
                             'estructura': elem['estructura'],
                             'inicio': posicion_inicio
                         }
                     })
-                    this.lista_programa[posicion_inicio][elem['estructura']].update({'fin': posicion_fin})
-                else if elem['estructura'] == 'si':
-                    posicion_inicio = len(this.lista_programa)
+                    this.lista_programa[posicion_inicio][elem['estructura']]['fin'] = posicion_fin
+                } else if (elem['estructura'] == 'si'){
+                    posicion_inicio = this.lista_programa.length
                     nueva_estructura = {
-                        elem['estructura']: {
+                        'si': {
                             'argumento': elem['argumento'],
                             'id' : posicion_inicio
                         }
                     }
 
-                    this.lista_programa.append(nueva_estructura)
+                    this.lista_programa.push(nueva_estructura)
                     this.expandir_arbol_recursivo(elem['cola'])
-                    posicion_fin = len(this.lista_programa)
-                    this.lista_programa.append({
+                    posicion_fin = this.lista_programa.length
+                    this.lista_programa.push({
                         'fin': {
                             'estructura': elem['estructura'],
                             'inicio': posicion_inicio,
                             'fin':posicion_fin+1
                         }
                     })
-                    this.lista_programa[posicion_inicio]['si'].update({'fin': posicion_fin})
-                    if elem.has_key('sino-cola'):
+                    this.lista_programa[posicion_inicio]['si']['fin'] = posicion_fin
+                    if ('sino-cola' in elem){
                         nueva_estructura = {
                             'sino': {}
                         }
-                        this.lista_programa.append(nueva_estructura)
+                        this.lista_programa.push(nueva_estructura)
                         this.expandir_arbol_recursivo(elem['sino-cola'])
-                        fin_sino = len(this.lista_programa)
-                        this.lista_programa.append({
+                        fin_sino = this.lista_programa.length
+                        this.lista_programa.push({
                             'fin': {
                                 'estructura': 'sino'
                             }
                         })
                         this.lista_programa[posicion_fin]['fin']['fin'] = fin_sino
-                else:#Se trata de la llamada a una función
-                    nueva_estructura = {
-                        elem['estructura']: {
-                            'argumento': elem['argumento'],
-                            'nombre': elem['nombre']
-                        }
                     }
-                    this.lista_programa.append(nueva_estructura)
-
-    this.traducir(self, token):
-        """Traduce un token de pascal a java"""
-        words = {
-            'move': 'avanza',
-            'turnleft': 'gira-izquierda',
-            'pickbeeper': 'coge-zumbador',
-            'putbeeper': 'deja-zumbador',
-            'turnoff': 'apagate',
-            'return': 'sal-de-instruccion',
-            'break': 'sal-de-bucle',
-            'continue': 'continua-bucle',
-            'frontIsClear': 'frente-libre',
-            'rightIsClear': 'derecha-libre',
-            'leftIsClear': 'izquierda-libre',
-            'nextToABeeper': 'junto-a-zumbador',
-            'anyBeepersInBeeperBag': 'algun-zumbador-en-la-mochila',
-            'facingNorth': 'orientado-al-norte',
-            'facingEast': 'orientado-al-este',
-            'facingSouth': 'orientado-al-sur',
-            'facingWest': 'orientado-al-oeste',
-            'notFacingWest': 'no-orientado-al-oeste',
-            'notFacingNorth': 'no-orientado-al-norte',
-            'notFacingSouth': 'no-orientado-al-sur',
-            'notFacingEast': 'no-orientado-al-este',
-            'notNextToABeeper': 'no-junto-a-zumbador',
-            'rightIsBlocked': 'derecha-bloqueada',
-            'frontIsBlocked': 'frente-bloqueado',
-            'leftIsBlocked': 'izquierda-bloqueada',
-            'noBeepersInBeeperBag': 'ningun-zumbador-en-la-mochila',
-            'iszero': 'si-es-cero',
-            'true': 'verdadero',
-            'false': 'falso',
-            'succ': 'sucede',
-            'pred': 'precede',
-            'if': 'si',
-            'while': 'mientras',
-            'iterate': 'repite'
+                } else { //Se trata de la llamada a una función
+                    estructura = elem['estructura']
+                    nueva_estructura = {}
+                    nueva_estructura[estructura] = {
+                        'argumento': elem['argumento'],
+                        'nombre': elem['nombre']
+                    }
+                    this.lista_programa.push(nueva_estructura)
+                }
+            }
         }
-        return words[token]
+    }
 }
 
-l = new KLexer('')
-g = new KGrammar(l)
+l = new KLexer('iniciar-programa inicia-ejecucion si frente-libre entonces avanza; termina-ejecucion finalizar-programa')
+g = new KGrammar(l, false, true, false)
+g.verificar_sintaxis()
 
+console.log(g.expandir_arbol())
 console.log('done!')
