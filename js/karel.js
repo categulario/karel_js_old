@@ -1246,7 +1246,7 @@ KWorld = function(filas, columnas, karel_pos, orientacion, mochila, casillas){
         var coordenadas = 'c'+coordenadas[0]+'_'+coordenadas[1]
         if (coordenadas in this.mundo['casillas']){
             casilla['zumbadores'] = this.mundo['casillas'][coordenadas]['zumbadores']
-            casilla['paredes'] = casilla['paredes'] | this.mundo['casillas'][coordenadas]['paredes']
+            casilla['paredes'] = casilla['paredes'].concat(this.mundo['casillas'][coordenadas]['paredes'])
         }
 
         return casilla
@@ -1294,7 +1294,7 @@ KWorld = function(filas, columnas, karel_pos, orientacion, mochila, casillas){
                 }
             } else {
                 //No existe el indice, tampoco la pared, asi que se agrega
-                this.mundo['casillas'][coordenadas] = {
+                this.mundo['casillas'][scoordenadas] = {
                     'paredes': [orientacion],
                     'zumbadores': 0
                 }
@@ -1320,7 +1320,7 @@ KWorld = function(filas, columnas, karel_pos, orientacion, mochila, casillas){
                 } else {
                     //quitamos una pared, asumimos que existe el registro
                     //del lado opuesto
-                    this.mundo['casillas'][casilla_opuesta]['paredes'].filter(function(a){return a!=posicion_opuesta})
+                    this.mundo['casillas'][scasilla_opuesta]['paredes'].filter(function(a){return a!=posicion_opuesta})
                 }
             }
             //Operaciones de limpieza para ahorrar memoria
@@ -1700,6 +1700,97 @@ KRunner = function(programa_compilado, mundo, limite_recursion, limite_iteracion
         this.diccionario_variables = {}
     }
 
+    this.expresion_entera = function(valor, diccionario_variables){
+        /*Obtiene el resultado de una evaluacion entera y lo devuelve
+        */
+        if (typeof valor == 'object') {
+            //Se trata de un sucede o un precede
+            if ('sucede' in valor)
+                return this.expresion_entera(valor['sucede'], diccionario_variables)+1
+            else
+                return this.expresion_entera(valor['precede'], diccionario_variables)-1
+        } else if (typeof valor == 'number')
+            return valor
+        else //Es una variable
+            return diccionario_variables[valor] //Esto debe devolver entero
+    }
+
+    this.termino_logico = function(lista_expresiones, diccionario_variables){
+        /* Obtiene el resultado de la evaluacion de un termino logico 'o'
+        para el punto en que se encuentre Karel al momento de la llamada,
+        recibe una lista con los terminos a evaluar
+        */
+        for(i=0;i<lista_expresiones.length;i++) {
+            var termino = lista_expresiones[i]
+            if (this.clausula_y(termino['y'], diccionario_variables))
+                return true
+        }
+        return false
+    }
+
+    this.clausula_y = function(lista_expresiones, diccionario_variables) {
+        /* Obtiene el resultado de una comparación 'y' entre terminos
+        logicos */
+        for(i=0;i<lista_expresiones.length;i++) {
+            var termino = lista_expresiones[i]
+            if (! this.clausula_no(termino, diccionario_variables))
+                return false //El resultado de una evaluacion 'y' es falso si uno de los terminos es falso
+        }
+        return true
+    }
+
+    this.clausula_no = function(termino, diccionario_variables) {
+        /* Obtiene el resultado de una negacion 'no' o de un termino
+        logico */
+        if (typeof termino == 'object') {
+            //Se trata de una negacion, un 'o' o un 'si-es-cero'
+            if ('no' in termino)
+                return ! this.clausula_no(termino['no'], diccionario_variables)
+            else if ('o' in termino)
+                return this.termino_logico(termino['o'], diccionario_variables)
+            else {
+                //Si es cero
+                if (this.expresion_entera(termino['si-es-cero'], diccionario_variables) == 0)
+                    return true
+                else
+                    return false
+            }
+        } else {
+            //Puede ser una condicion relacionada con el mundo, o verdadero y falso
+            if (termino == 'verdadero')
+                return true
+            else if (termino == 'falso')
+                return false
+            else if (termino == 'frente-libre')
+                return this.mundo.frente_libre()
+            else if (termino == 'frente-bloqueado')
+                return ! this.mundo.frente_libre()
+            else if (termino == 'izquierda-libre')
+                return this.mundo.izquierda_libre()
+            else if (termino == 'izquierda-bloqueada')
+                return ! this.mundo.izquierda_libre()
+            else if (termino == 'derecha-libre')
+                return this.mundo.derecha_libre()
+            else if (termino == 'derecha-bloqueada')
+                return ! this.mundo.derecha_libre()
+            else if (termino == 'junto-a-zumbador')
+                return this.mundo.junto_a_zumbador()
+            else if (termino == 'no-junto-a-zumbador')
+                return ! this.mundo.junto_a_zumbador()
+            else if (termino == 'algun-zumbador-en-la-mochila')
+                return this.mundo.algun_zumbador_en_la_mochila()
+            else if (termino == 'ningun-zumbador-en-la-mochila')
+                return ! this.mundo.algun_zumbador_en_la_mochila()
+            else {
+                //Es una preguna de orientacion
+                if (termino.indexOf('no-') == 0)
+                    return ! this.mundo.orientado_al(termino.slice(16)) //Que truco
+                else
+                    return this.mundo.orientado_al(termino.slice(13)) //Oh si!
+            }
+        }
+    }
+
     this.step = function(){
         /* Da un paso en la cinta de ejecución de Karel */
         try {
@@ -1864,7 +1955,7 @@ KRunner = function(programa_compilado, mundo, limite_recursion, limite_iteracion
     }
 }
 
-//~ l = new KLexer('iniciar-programa define-nueva-instruccion a como avanza; inicia-ejecucion a; apagate; termina-ejecucion finalizar-programa')
+//~ l = new KLexer('iniciar-programa inicia-ejecucion mientras frente-libre hacer avanza; apagate; termina-ejecucion finalizar-programa')
 //~ g = new KGrammar(l, false, true, false)
 //~ var sintaxis_correcta = false
 //~ try {

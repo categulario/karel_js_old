@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <title>Karelécatl</title>
+    <script src="js/jquery.js" type="text/javascript" charset="utf-8"></script>
+    <script src="js/karel.js" type="text/javascript" charset="utf-8"></script>
+    <script src="js/mundo.js" type="text/javascript" charset="utf-8"></script>
+    <style type="text/css" media="screen">
+        #world {
+            height: 400px;
+            width: 400px;
+            border: #050F70 solid 2px;
+        }
+    </style>
+    <script>
+      $(document).ready(function(){
+          mundo = $("#world")[0];
+          paint(mundo.getContext('2d'), new KWorld(), mundo.width, mundo.height)
+      });
+    </script>
+  </head>
+  <body>
+    <canvas id="world" width="400" height="400"></canvas>
+  </body>
+</html>
