@@ -1864,26 +1864,26 @@ KRunner = function(programa_compilado, mundo, limite_recursion, limite_iteracion
     }
 }
 
-l = new KLexer('iniciar-programa define-nueva-instruccion a como avanza; inicia-ejecucion a; apagate; termina-ejecucion finalizar-programa')
-g = new KGrammar(l, false, true, false)
-var sintaxis_correcta = false
-try {
-    g.verificar_sintaxis()
-    sintaxis_correcta = true
-} catch(e) {
-    console.log(e)
-}
-if(sintaxis_correcta) {
-    g.expandir_arbol()
-
-    m = new KWorld()
-    m.pon_zumbadores([1, 1], 3)
-    m.conmuta_pared([1, 1], 'norte')
-
-    r = new KRunner(g.ejecutable, m)
-    r.run()
-    console.log(r.estado)
-    console.log(r.mensaje)
-}
-
-console.log('done!')
+//~ l = new KLexer('iniciar-programa define-nueva-instruccion a como avanza; inicia-ejecucion a; apagate; termina-ejecucion finalizar-programa')
+//~ g = new KGrammar(l, false, true, false)
+//~ var sintaxis_correcta = false
+//~ try {
+    //~ g.verificar_sintaxis()
+    //~ sintaxis_correcta = true
+//~ } catch(e) {
+    //~ console.log(e)
+//~ }
+//~ if(sintaxis_correcta) {
+    //~ g.expandir_arbol()
+//~
+    //~ m = new KWorld()
+    //~ m.pon_zumbadores([1, 1], 3)
+    //~ m.conmuta_pared([1, 1], 'norte')
+//~
+    //~ r = new KRunner(g.ejecutable, m)
+    //~ r.run()
+    //~ console.log(r.estado)
+    //~ console.log(r.mensaje)
+//~ }
+//~
+//~ console.log('done!')
