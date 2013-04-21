@@ -24,6 +24,35 @@ if(!Array.prototype.forEach) {
     }
 }
 
+if(!Array.prototype.toInt) {
+    Array.prototype.toInt = function() {
+        for(i=0;i<this.length;i++){
+            this[i] = this[i]*1
+        }
+    }
+}
+
+if(!Array.prototype.top) {
+    Array.prototype.top = function() {
+        return this[this.length-1];
+    }
+}
+
+if(!Array.prototype.is_empty) {
+    Array.prototype.is_empty = function() {
+        return this.length == 0
+    }
+}
+
+if(!Array.prototype.en_tope) {
+    Array.prototype.en_tope = function(id) {
+        if(this.is_empty())
+            return false
+        ultimo = this.top()
+        return ultimo['id'] == id
+    }
+}
+
 ascii_letters = 'qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM'
 
 KLexer = function(cadena, debug){
@@ -342,7 +371,7 @@ KGrammar = function(lexer, strict, futuro, strong_logic){
     ].concat(this.instrucciones_java).concat(this.condiciones_java).concat(this.expresiones_enteras_java).concat(this.estructuras_java)
 
     this.palabras_reservadas_ruby = [
-        "def",
+        "this.",
         "veces",
         "fin",
         "o",
@@ -450,7 +479,7 @@ KGrammar = function(lexer, strict, futuro, strong_logic){
             this.sintaxis = 'ruby'
             this.lexer.establecer_sintaxis('ruby')
 
-            this.arbol['main'] = this.ruby_codeblock([], False, False)
+            this.arbol['main'] = this.ruby_codeblock([], false, false)
         }
         if (this.strict && (! this.tiene_apagate))
             throw "Tu código no tiene 'apagate', esto no es permitido en el modo estricto"
@@ -471,7 +500,7 @@ KGrammar = function(lexer, strict, futuro, strong_logic){
                 }
             } else {
                 if((this.lexer.palabras+this.lexer.numeros).indexOf(token[i]) == -1){
-                    es_valido = False
+                    es_valido = false
                     break
                 }
             }
@@ -1109,9 +1138,752 @@ KGrammar = function(lexer, strict, futuro, strong_logic){
     }
 }
 
-l = new KLexer('iniciar-programa define-nueva-instruccion a como avanza; inicia-ejecucion termina-ejecucion finalizar-programa')
-g = new KGrammar(l, false, true, false)
-g.verificar_sintaxis()
+function contrario(cardinal) {
+    /* Suena ridículo, pero obtiene el punto cardinal contrario al
+    dado. */
+    var puntos = {
+        'norte': 'sur',
+        'sur': 'norte',
+        'este': 'oeste',
+        'oeste': 'este'
+    }
+    return puntos[cardinal]
+}
 
-console.log(g.expandir_arbol())
+function obten_casilla_avance(casilla, direccion) {
+    /* Obtiene una casilla contigua dada una casilla de inicio y
+    una direccion de avance*/
+    if (direccion == 'norte')
+        return [casilla[0]+1, casilla[1]]
+    else if (direccion == 'sur')
+        return [casilla[0]-1, casilla[1]]
+    else if (direccion == 'este')
+        return [casilla[0], casilla[1]+1]
+    else if (direccion == 'oeste')
+        return [casilla[0], casilla[1]-1]
+}
+
+function rotado(cardinal) {
+    /* Obtiene la orientación resultado de un gira-izquierda en
+    Karel */
+    var puntos = {
+        'norte': 'oeste',
+        'oeste': 'sur',
+        'sur': 'este',
+        'este': 'norte'
+    }
+    return puntos[cardinal]
+}
+
+KWorld = function(filas, columnas, karel_pos, orientacion, mochila, casillas){
+    if(typeof filas == 'undefined')
+        var filas = 100
+    if(typeof columnas == 'undefined')
+        var columnas = 100
+    if(typeof karel_pos == 'undefined')
+        var karel_pos = [1, 1]
+    if(typeof orientacion == 'undefined')
+        var orientacion = 'norte'
+    if(typeof mochila == 'undefined')
+        var mochila = 0
+    if(typeof casillas == 'undefined')
+        var casillas = {}
+    this.mundo = {
+        'karel': {
+            'posicion': karel_pos,
+            'orientacion': orientacion,
+            'mochila': mochila //Zumbadores en la mochila
+        },
+        'dimensiones': {
+            'filas': filas,
+            'columnas': columnas
+        },
+        'casillas': casillas
+    }
+
+    this.posicion_karel = function(){
+        return this.mundo['karel']['posicion']
+    }
+
+    this.establece_karel = function(posicion, orientacion){
+        /*pone a karel en algun lugar especifico*/
+        if(typeof karel_pos == 'undefined')
+            var karel_pos = [1, 1]
+        if(typeof orientacion == 'undefined')
+            var orientacion = 'norte'
+        this.mundo['karel']['posicion'] = posicion
+        this.mundo['karel']['orientacion'] = orientacion
+    }
+
+    this.establece_mochila = function(cantidad) {
+        /*Establece los zumbadores en la mochila de karel a cierta cantidad*/
+        if (cantidad == 'inf' || cantidad == '-1' || cantidad == -1)
+            this.mundo['karel']['mochila'] = -1
+        else if (typeof cantidad == 'number') {
+            if (cantidad >= 0)
+                this.mundo['karel']['mochila'] = cantidad
+            else
+                throw 'Esta no es una cantidad apropiada de zumbadores'
+        } else
+            throw 'Deberías consultar a un psiquiatra'
+    }
+
+    this.obten_casilla = function(coordenadas){
+        /* Obtiene una casilla del mundo y la devuelve así a lo sobres */
+        var casilla = {
+            'zumbadores': 0,
+            'paredes': []
+        }
+        if (coordenadas[0] == 1) //Primera fila, pared izquierda
+            casilla['paredes'].push('sur')
+        if (coordenadas[0] == 100)
+            casilla['paredes'].push('norte')
+        if (coordenadas[1] == 1) //primera columna
+            casilla['paredes'].push('oeste')
+        if (coordenadas[1] == 100)
+            casilla['paredes'].push('este')
+
+        var coordenadas = 'c'+coordenadas[0]+'_'+coordenadas[1]
+        if (coordenadas in this.mundo['casillas']){
+            casilla['zumbadores'] = this.mundo['casillas'][coordenadas]['zumbadores']
+            casilla['paredes'] = casilla['paredes'] | this.mundo['casillas'][coordenadas]['paredes']
+        }
+
+        return casilla
+    }
+
+    this.obten_mochila = function(){
+        /*Obtiene la cantidad de zumbadores en la mochila de karel*/
+        return this.mundo['karel']['mochila']
+    }
+
+    this.obten_zumbadores = function(casilla){
+        /*Devuelve los zumbadores para esta casilla*/
+        var casilla = 'c'+casilla[0]+'_'+casilla[1]
+        if (casilla in this.mundo['casillas'])
+            return this.mundo['casillas'][casilla]['zumbadores']
+        else
+            return 0
+    }
+
+    this.conmuta_pared = function(coordenadas, orientacion){
+        /* Agrega una pared al mundo, si es que está permitido, el
+        atributo 'coordenadas' es una tupla con la fila y columna de la
+        casilla afectada, orientacion es una cadena que indica si se pone
+        arriba, abajo, a la izquierda o a la derecha. */
+        if (0<coordenadas[0] && coordenadas[0]<this.mundo['dimensiones']['filas']+1 && 0<coordenadas[1] && coordenadas[1]<this.mundo['dimensiones']['columnas']+1){
+            if (coordenadas[0] == 1 && orientacion == 'sur')
+                return
+            if (coordenadas[0] == 100 && orientacion == 'norte')
+                return
+            if (coordenadas[1] == 1 && orientacion == 'oeste')
+                return
+            if (coordenadas[1] == 100 && orientacion == 'este')
+                return
+            var agregar = true //Indica si agregamos o quitamos la pared
+            var scoordenadas = 'c'+coordenadas[0]+'_'+coordenadas[1]
+            if (scoordenadas in this.mundo['casillas']){
+                //Puede existir una pared
+                if (this.mundo['casillas'][scoordenadas]['paredes'].indexOf(orientacion) != -1) {
+                    //Ya existe la pared, la quitamos
+                    this.mundo['casillas'][scoordenadas]['paredes'].filter(function(a){return a!=orientacion})
+                    agregar = false
+                } else {
+                    //no existe la pared, la agregamos
+                    this.mundo['casillas'][scoordenadas]['paredes'].push(orientacion)
+                }
+            } else {
+                //No existe el indice, tampoco la pared, asi que se agrega
+                this.mundo['casillas'][coordenadas] = {
+                    'paredes': [orientacion],
+                    'zumbadores': 0
+                }
+            }
+            //Debemos conmutar la pared en la casilla opuesta
+            var casilla_opuesta = obten_casilla_avance(coordenadas, orientacion)
+            var posicion_opuesta = contrario(orientacion)
+            var scasilla_opuesta = 'c'+casilla_opuesta[0]+'_'+casilla_opuesta[1]
+            if (0<casilla_opuesta[0] && casilla_opuesta[0]<this.mundo['dimensiones']['filas']+1 && 0<casilla_opuesta[1] && casilla_opuesta[1]<this.mundo['dimensiones']['columnas']+1){
+                //no es una casilla en los bordes
+                if (agregar){
+                    //Agregamos una pared
+                    if (scasilla_opuesta in this.mundo['casillas']) {
+                        //Del otro lado si existe registro
+                        this.mundo['casillas'][scasilla_opuesta]['paredes'].push(posicion_opuesta)
+                    } else {
+                        //Tampoco hay registro del otro lado
+                        this.mundo['casillas'][scasilla_opuesta] = {
+                            'paredes': [posicion_opuesta],
+                            'zumbadores': 0
+                        }
+                    }
+                } else {
+                    //quitamos una pared, asumimos que existe el registro
+                    //del lado opuesto
+                    this.mundo['casillas'][casilla_opuesta]['paredes'].filter(function(a){return a!=posicion_opuesta})
+                }
+            }
+            //Operaciones de limpieza para ahorrar memoria
+            if (! (this.mundo['casillas'][scoordenadas]['paredes'] || this.mundo['casillas'][scoordenadas]['zumbadores']))
+                delete this.mundo['casillas'][scoordenadas]
+            if (! (this.mundo['casillas'][scasilla_opuesta]['paredes'] || this.mundo['casillas'][scasilla_opuesta]['zumbadores']))
+                delete this.mundo['casillas'][scasilla_opuesta]
+        }
+    }
+
+    this.pon_zumbadores = function(posicion, cantidad){
+        /* Agrega zumbadores al mundo en la posicion dada */
+        if (cantidad == 'inf')
+            cantidad = -1
+        if (0<posicion[0] && posicion[0]<this.mundo['dimensiones']['filas']+1 && 0<posicion[1] && posicion[1]<this.mundo['dimensiones']['columnas']+1){
+            var sposicion = 'c'+posicion[0]+'_'+posicion[1]
+            if (sposicion in this.mundo['casillas'])
+                this.mundo['casillas'][sposicion]['zumbadores'] = cantidad
+            else{
+                this.mundo['casillas'][sposicion] = {
+                    'zumbadores': cantidad,
+                    'paredes': []
+                }
+            }
+            //Limpiamos la memoria si es necesario
+            if (! (this.mundo['casillas'][sposicion]['paredes'] || this.mundo['casillas'][sposicion]['zumbadores']))
+                delete this.mundo['casillas'][sposicion]
+        }
+    }
+
+    this.avanza = function(test){
+        /* Determina si puede karel avanzar desde la posición en la que
+        se encuentra, de ser posible avanza. Si el parámetro test es
+        verdadero solo ensaya. */
+        //Determino primero si está en los bordes
+        if (this.frente_libre()) {
+            this.mundo['karel']['posicion'] = obten_casilla_avance(this.mundo['karel']['posicion'], this.mundo['karel']['orientacion'])
+            return true
+        } else
+            return false
+    }
+
+    this.gira_izquierda = function(test){
+        /* Gira a Karel 90° a la izquierda, obteniendo una nueva
+        orientación. Si el parámetro test es verdadero solo ensaya */
+        if (! test)
+            this.mundo['karel']['orientacion'] = rotado(this.mundo['karel']['orientacion'])
+    }
+
+    this.coge_zumbador = function(test){
+        /* Determina si Karel puede coger un zumbador, si es posible lo
+        toma, devuelve Falso si no lo logra. Si el parámetro test es
+        verdadero solo ensaya. */
+        var posicion = this.mundo['karel']['posicion']
+        var sposicion = 'c'+posicion[0]+'_'+posicion[1]
+        if (this.junto_a_zumbador()) {
+            if (this.mundo['casillas'][sposicion]['zumbadores'] == -1) {
+                if (! test)
+                    if (this.mundo['karel']['mochila'] != -1)
+                        this.mundo['karel']['mochila'] += 1
+            } else if (this.mundo['casillas'][sposicion]['zumbadores']>0)
+                if (! test){
+                    if (this.mundo['karel']['mochila'] != -1)
+                        this.mundo['karel']['mochila'] += 1
+                    this.mundo['casillas'][sposicion]['zumbadores'] -= 1
+                }
+            //Limpiamos la memoria si es necesario
+            if (! (this.mundo['casillas'][sposicion]['paredes'] || this.mundo['casillas'][sposicion]['zumbadores']))
+                delete this.mundo['casillas'][sposicion]
+            return true
+        } else
+            return false
+    }
+
+    this.deja_zumbador = function(test){
+        /* Determina si Karel puede dejar un zumbador en la casilla
+        actual, si es posible lo deja. Si el parámetro test es verdadero
+        solo ensaya  */
+        var posicion = this.mundo['karel']['posicion']
+        if (this.algun_zumbador_en_la_mochila()){
+            if (! test){
+                var sposicion = 'c'+posicion[0]+'_'+posicion[1]
+                if (sposicion in this.mundo['casillas']){
+                    if (this.mundo['casillas'][posicion]['zumbadores'] != -1)
+                        this.mundo['casillas'][posicion]['zumbadores'] += 1
+                } else {
+                    this.mundo['casillas'][posicion] = {
+                        'zumbadores': 1,
+                        'paredes': []
+                    }
+                }
+                if (this.mundo['karel']['mochila'] != -1)
+                    this.mundo['karel']['mochila'] -= 1
+            }
+            return true
+        } else
+            return false
+    }
+
+    this.frente_libre = function() {
+        /* Determina si Karel tiene el frente libre */
+        var direccion = this.mundo['karel']['orientacion']
+        var posicion = this.mundo['karel']['posicion']
+        if (direccion == 'norte') {
+            if (posicion[0] == this.mundo['dimensiones']['filas'])
+                return false
+        } else if (direccion == 'sur') {
+            if (posicion[0] == 1)
+                return false
+        } else if (direccion == 'este') {
+            if (posicion[1] == this.mundo['dimensiones']['columnas'])
+                return false
+        } else if (direccion == 'oeste') {
+            if (posicion[1] == 1)
+                return false
+        }
+        var sposicion = 'c'+posicion[0]+'_'+posicion[1]
+        if (! (sposicion in this.mundo['casillas']))
+            return true //No hay un registro para esta casilla, no hay paredes
+        else{
+            if (this.mundo['casillas'][sposicion]['paredes'].indexOf(direccion) != -1)
+                return false
+            else
+                return true
+        }
+    }
+
+    this.izquierda_libre = function(){
+        /* Determina si Karel tiene la izquierda libre */
+        var direccion = this.mundo['karel']['orientacion']
+        var posicion = this.mundo['karel']['posicion']
+        if (direccion == 'norte') {
+            if (posicion[1] == 1)
+                return false
+        } else if (direccion == 'sur') {
+            if (posicion[1] == this.mundo['dimensiones']['columnas'])
+                return false
+        } else if (direccion == 'este') {
+            if (posicion[0] == this.mundo['dimensiones']['filas'])
+                return false
+        } else if (direccion == 'oeste') {
+            if (posicion[0] == 1)
+                return false
+        }
+        var sposicion = 'c'+posicion[0]+'_'+posicion[1]
+        if (! (sposicion in this.mundo['casillas']))
+            return true //No hay un registro para esta casilla, no hay paredes
+        else{
+            if (this.mundo['casillas'][posicion]['paredes'].indexOf(rotado(direccion)) != -1)
+                return false
+            else
+                return true
+        }
+    }
+
+    this.derecha_libre = function(){
+        /* Determina si Karel tiene la derecha libre */
+        var direccion = this.mundo['karel']['orientacion']
+        var posicion = this.mundo['karel']['posicion']
+        if (direccion == 'norte') {
+            if (posicion[1] == this.mundo['dimensiones']['columnas'])
+                return false
+        } else if (direccion == 'sur') {
+            if (posicion[1] == 1)
+                return false
+        } else if (direccion == 'este') {
+            if (posicion[0] == 1)
+                return false
+        } else if (direccion == 'oeste') {
+            if (posicion[0] == this.mundo['dimensiones']['filas'])
+                return false
+        }
+        var sposicion = 'c'+posicion[0]+'_'+posicion[1]
+        if (! (sposicion in this.mundo['casillas']))
+            return true //No hay un registro para esta casilla, no hay paredes extra
+        else{
+            if (this.mundo['casillas'][sposicion]['paredes'].indexOf(rotado(rotado(rotado(direccion)))) != -1)
+                return false
+            else
+                return true
+        }
+    }
+
+    this.junto_a_zumbador = function(){
+        /* Determina si Karel esta junto a un zumbador. */
+        var sposicion = 'c'+this.mundo['karel']['posicion'][0]+'_'+this.mundo['karel']['posicion'][1]
+        if (sposicion in this.mundo['casillas']) {
+            if (this.mundo['casillas'][sposicion]['zumbadores'] == -1)
+                return true
+            else if (this.mundo['casillas'][sposicion]['zumbadores'] > 0)
+                return true
+            else
+                return false
+        } else
+            return false
+    }
+
+    this.orientado_al = function(direccion){
+        /* Determina si karel esta orientado al norte */
+        if (this.mundo['karel']['orientacion'] == direccion)
+            return true
+        else
+            return false
+    }
+
+    this.algun_zumbador_en_la_mochila = function(){
+        /* Determina si karel tiene algun zumbador en la mochila */
+        if (this.mundo['karel']['mochila'] > 0 || this.mundo['karel']['mochila'] == -1)
+            return true
+        else
+            return false
+    }
+
+    this.exporta_mundo = function(){
+        /* Exporta las condiciones actuales del mundo usando algun
+        lenguaje de marcado */
+        var mundo = {
+            'karel': {
+                'posicion': this.mundo['karel']['posicion'],
+                'orientacion': this.mundo['karel']['orientacion'],
+                'mochila': this.mundo['karel']['mochila']
+            },
+            'dimensiones': {
+                'filas': this.mundo['dimensiones']['filas'],
+                'columnas': this.mundo['dimensiones']['columnas']
+            },
+            'casillas': []
+        }
+        for (llave in this.mundo['casillas']){
+            mundo['casillas'].push({
+                'fila': llave.substr(1).split('_')[0]*1,
+                'columna': llave.substr(1).split('_')[1]*1,
+                'zumbadores': this.mundo['casillas'][llave]['zumbadores'],
+                'paredes': this.mundo['casillas'][llave]['paredes']
+            })
+        }
+        return mundo
+    }
+
+    this.exporta_casillas = function(){
+        var casillas = []
+        for (llave in this.mundo['casillas']){
+            casillas.push({
+                'fila': llave.substr(1).split('_')[0]*1,
+                'columna': llave.substr(1).split('_')[1]*1,
+                'zumbadores': this.mundo['casillas'][llave]['zumbadores'],
+                'paredes': this.mundo['casillas'][llave]['paredes']
+            })
+        }
+        return casillas
+    }
+
+    this.carga_casillas = function(casillas){
+        /* Carga las casillas de un diccionario dado. */
+        this.mundo_backup_c = this.mundo
+        this.mundo['casillas'] = {}
+        try {
+            for (i==0;i<casillas.length;i++){
+                var casilla = casillas[i]
+                this.mundo['casillas']['c'+casilla[fila]+'_'+casilla[columna]] = {
+                    'zumbadores': casilla['zumbadores'],
+                    'paredes': casilla['paredes']
+                }
+            }
+        } catch(e) {
+            this.mundo = this.mundo_backup_c
+            delete this.mundo_backup_c
+            return false
+        }
+        delete this.mundo_backup_c
+        return true
+    }
+
+    this.carga_mundo = function(mundo){
+        /* Carga el contenido de un archivo con la configuración del
+        mundo. Archivo debe ser una instancia de 'file' o de un objeto
+        con metodo 'read()' */
+        this.mundo_backup = this.mundo
+        try {
+            this.mundo = {
+                'karel': {
+                    'posicion': mundo['karel']['posicion'],
+                    'orientacion': mundo['karel']['orientacion'],
+                    'mochila': mundo['karel']['mochila'] //Zumbadores en la mochila
+                },
+                'dimensiones': {
+                    'filas': mundo['dimensiones']['filas'],
+                    'columnas': mundo['dimensiones']['columnas']
+                },
+                'casillas': {}
+            }
+            if (! this.carga_casillas(mundo['casillas']))
+                throw "Se mando un mundo deforme"
+        } catch(e) {
+            this.mundo = this.mundo_backup
+            delete this.mundo_backup
+            return false
+        }
+        delete this.mundo_backup
+        return true
+    }
+
+    this.limpiar = function(){
+        /* Limpia el mundo y lo lleva a un estado inicial */
+        this.mundo = {
+            'karel': {
+                'posicion': mundo['karel']['posicion'],
+                'orientacion': mundo['karel']['orientacion'],
+                'mochila': mundo['karel']['mochila'] //Zumbadores en la mochila
+            },
+            'dimensiones': {
+                'filas': mundo['dimensiones']['filas'],
+                'columnas': mundo['dimensiones']['columnas']
+            },
+            'casillas': {}
+        }
+    }
+}
+
+function merge(lista_llaves, lista_valores) {
+    /* Combina un par de listas de la misma longitud en un
+    diccionario */
+    d = {}
+    l_valores = lista_valores.slice(0, lista_valores.length)
+    //Hacemos una copia de la lista, por que no queremos modificar
+    //la lista original, creeme, no lo queremos...
+    l_valores.reverse()
+    for (i in lista_llaves)
+    for (i=0;i<lista_llaves.length;i++)
+        d[lista_llaves[i]] = l_valores.pop()
+    return d
+}
+
+KRunner = function(programa_compilado, mundo, limite_recursion, limite_iteracion, limite_ejecucion, debug) {
+    /* Inicializa el ejecutor dados un codigo fuente compilado y un
+    mundo, tambien establece el limite para la recursion sobre una
+    funcion antes de botar un error stack_overflow.*/
+    this.ejecutable = programa_compilado
+    if (typeof mundo == 'undefined')
+        this.mundo = new KWorld()
+    else
+        this.mundo = mundo
+    this.limite_recursion = typeof limite_recursion == 'undefined' ? 65000 : limite_recursion
+    this.limite_iteracion = typeof limite_iteracion == 'undefined' ? 65000 : limite_iteracion
+    this.limite_ejecucion = typeof limite_ejecucion == 'undefined' ? 200000 : limite_ejecucion
+
+    this.corriendo = true
+    this.indice = 0 //Marcador con la posición en la cinta de ejecución
+    this.ejecucion = 0 //Contador del número de instrucciones que se han ejecutado
+    this.diccionario_variables = {}
+
+    this.sal_de_instruccion = false
+    this.sal_de_bucle = false
+    this.pila = [] //La pila de funciones y bucles
+    this.profundidad = 0
+    //Las anteriores cantidades limitan que tan hondo se puede llegar
+    //mediante recursion, y que tanto puede iterar un bucle, esto para
+    //evitar problemas al evaluar codigos en un servidor.
+    this.estado = "Ok" //El estado en que se encuentra
+    this.mensaje = "" //Mensaje con que termina la ejecucion
+    this.debug = debug
+    //Debug
+
+    this.run = function(){
+        /* Ejecuta el codigo compilado de Karel en el mundo
+        proporcionado, comenzando por el bloque 'main' o estructura
+        principal. */
+        this.step_run()
+        while (this.corriendo)
+            this.step()
+    }
+
+    this.step_run = function(){
+        /* Prepara las cosas para el step run */
+        this.indice = this.ejecutable['main'] //El cabezal de esta máquina de turing
+        this.ejecucion = 0
+        this.diccionario_variables = {}
+    }
+
+    this.step = function(){
+        /* Da un paso en la cinta de ejecución de Karel */
+        try {
+            if (this.corriendo){
+                if (this.ejecucion >= this.limite_ejecucion)
+                    throw "HanoiTowerException: Tu programa nunca termina ¿Usaste 'apagate'?"
+                //Hay que ejecutar la función en turno en el índice actual
+                instruccion = this.ejecutable['lista'][this.indice]
+                if (typeof instruccion == 'object') {
+                    //Se trata de una estructura de control o una funcion definida
+                    if ('si' in instruccion) {
+                        if (this.debug)
+                            console.log('si')
+                        if (this.termino_logico(instruccion['si']['argumento']['o'], this.diccionario_variables))
+                            this.indice += 1 //Avanzamos a la siguiente posicion en la cinta
+                        else //nos saltamos el si, vamos a la siguiente casilla, que debe ser un sino o la siguiente instruccion
+                            this.indice = instruccion['si']['fin']+1
+                        this.ejecucion += 1
+                    } else if ('sino' in instruccion) { //Llegamos a un sino, procedemos, no hay de otra
+                        if (this.debug)
+                            console.log('sino')
+                        this.indice += 1
+                        this.ejecucion += 1
+                    } else if ('repite' in instruccion) {
+                        if (this.debug)
+                            console.log('repite', instruccion['repite']['argumento'])
+                        if (! this.pila.en_tope(instruccion['repite']['id'])) {
+                            argumento = this.expresion_entera(instruccion['repite']['argumento'], this.diccionario_variables)
+                            if (argumento < 0)
+                                throw "WeirdNumberException: Estás intentando que karel repita un número negativo de veces"
+                            this.pila.push({
+                                'id': instruccion['repite']['id'],
+                                'cuenta': 0,
+                                'argumento': argumento,
+                                'fin': instruccion['repite']['fin']
+                            }) //Cuenta las ejecuciones para este bucle
+                        }
+                        if (this.pila.top()['argumento']>0) {
+                            if (this.pila.top()['cuenta'] == this.limite_iteracion)
+                                throw 'LoopLimitExceded: hay un bucle que se cicla'
+                            this.indice += 1
+                            this.pila.top()['argumento'] -= 1
+                            this.pila.top()['cuenta'] += 1
+                        } else { //nos vamos al final y extraemos el repite de la pila
+                            this.indice = instruccion['repite']['fin']+1
+                            this.pila.pop()
+                        }
+                        this.ejecucion += 1
+                    } else if ('mientras' in instruccion) {
+                        if (this.debug)
+                            console.log('mientras')
+                        if (! this.pila.en_tope(instruccion['mientras']['id'])) {
+                            this.pila.push({
+                                'id': instruccion['mientras']['id'],
+                                'cuenta': 0,
+                                'fin': instruccion['mientras']['fin']
+                            }) //Cuenta las ejecuciones para este bucle
+                        }
+                        if (this.termino_logico(instruccion['mientras']['argumento']['o'], this.diccionario_variables)) {//Se cumple la condición del mientras
+                            if (this.pila.top()['cuenta'] == this.limite_iteracion)
+                                throw 'LoopLimitExceded: hay un bucle que se cicla'
+                            this.indice += 1
+                            this.pila.top()['cuenta'] += 1
+                        } else { //nos vamos al final
+                            this.indice = instruccion['mientras']['fin']+1
+                            this.pila.pop()
+                        }
+                        this.ejecucion += 1
+                    } else if ('fin' in instruccion) { //Algo termina aqui
+                        if (this.debug)
+                            console.log('fin', instruccion['fin']['estructura'])
+                        if (instruccion['fin']['estructura'] == 'mientras' || instruccion['fin']['estructura'] == 'repite')
+                            this.indice = instruccion['fin']['inicio']
+                        else if (instruccion['fin']['estructura'] == 'si')
+                            this.indice = instruccion['fin']['fin']
+                        else if (instruccion['fin']['estructura'] == 'sino')
+                            this.indice += 1
+                        else{ //fin de una funcion
+                            nota = this.pila.pop() //Obtenemos la nota de donde nos hemos quedado
+                            this.indice = nota['posicion']+1
+                            this.diccionario_variables = nota['diccionario_variables']
+                            this.profundidad -= 1
+                        }
+                    } else { //Se trata la llamada a una función
+                        if (this.debug)
+                            console.log(instruccion['instruccion']['nombre'])
+                        if (this.profundidad == this.limite_recursion)
+                            throw 'StackOverflow: Karel ha excedido el límite de recursión'
+                        //Hay que guardar la posición actual y el diccionario de variables en uso
+                        this.pila.push({
+                            'posicion': this.indice,
+                            'diccionario_variables': this.diccionario_variables
+                        })
+                        this.profundidad += 1
+                        // Lo que prosigue es ir a la definición de la función
+                        this.indice = this.ejecutable['indice_funciones'][instruccion['instruccion']['nombre']]+1
+                        // recalcular el diccionario de variables
+                        valores = []
+                        for (i=0;i<instruccion['instruccion']['argumento'].length;i++)
+                            valores.push(this.expresion_entera(instruccion['instruccion']['argumento'][i], this.diccionario_variables))
+                        this.diccionario_variables = merge(
+                            this.ejecutable['lista'][this.indice-1][instruccion['instruccion']['nombre']]['params'],
+                            valores
+                        )
+                        this.ejecucion += 1
+                    }
+                } else {
+                    //Es una instruccion predefinida de Karel
+                    if (this.debug)
+                        console.log(instruccion)
+                    if (instruccion == 'avanza') {
+                        if (! this.mundo.avanza())
+                            throw 'Karel se ha estrellado con una pared!'
+                        this.indice +=1
+                    } else if (instruccion == 'gira-izquierda') {
+                        this.mundo.gira_izquierda()
+                        this.indice +=1
+                    } else if (instruccion == 'coge-zumbador') {
+                        if (! this.mundo.coge_zumbador())
+                            throw 'Karel quizo coger un zumbador pero no habia en su posicion'
+                        this.indice +=1
+                    } else if (instruccion == 'deja-zumbador') {
+                        if (! this.mundo.deja_zumbador())
+                            throw 'Karel quizo dejar un zumbador pero su mochila estaba vacia'
+                        this.indice +=1
+                    } else if (instruccion == 'apagate') {
+                        this.corriendo = false //Fin de la ejecución
+                        this.estado = 'OK'
+                        this.mensaje = 'Ejecucion terminada'
+                        return 'TERMINADO'
+                    } else if (instruccion == 'sal-de-instruccion') {
+                        while (this.pila.top().has_key('id'))
+                            this.pila.pop() //Sacamos todos los bucles
+                        nota = this.pila.pop() //Obtenemos la nota de donde nos hemos quedado
+                        this.indice = nota['posicion']+1
+                        this.diccionario_variables = nota['diccionario_variables']
+                    } else if (instruccion == 'sal-de-bucle') {
+                        bucle = this.pila.pop()
+                        this.indice = bucle['fin']+1
+                    } else if (instruccion == 'continua-bucle') {
+                        bucle = this.pila.top()
+                        this.indice = bucle['fin']
+                    } else //FIN
+                        throw "HanoiTowerException: Tu programa excede el límite de ejecución ¿Usaste 'apagate'?"
+                    this.ejecucion += 1
+                }
+            } else {
+                this.estado = 'OK'
+                this.mensaje = 'Ejecucion terminada'
+                this.corriendo = false
+                return 'TERMINADO'
+            }
+        } catch (e) {
+            this.estado = 'ERROR'
+            this.mensaje = e
+            this.corriendo = false
+            return 'ERROR'
+        }
+        this.estado = 'OK'
+        this.mensaje = 'Ejecucion terminada'
+        return 'OK'
+    }
+}
+
+l = new KLexer('iniciar-programa define-nueva-instruccion a como avanza; inicia-ejecucion a; apagate; termina-ejecucion finalizar-programa')
+g = new KGrammar(l, false, true, false)
+var sintaxis_correcta = false
+try {
+    g.verificar_sintaxis()
+    sintaxis_correcta = true
+} catch(e) {
+    console.log(e)
+}
+if(sintaxis_correcta) {
+    g.expandir_arbol()
+
+    m = new KWorld()
+    m.pon_zumbadores([1, 1], 3)
+    m.conmuta_pared([1, 1], 'norte')
+
+    r = new KRunner(g.ejecutable, m)
+    r.run()
+    console.log(r.estado)
+    console.log(r.mensaje)
+}
+
 console.log('done!')
